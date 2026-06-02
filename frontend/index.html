@@ -822,8 +822,12 @@
         } catch (e) {
           console.error(e);
           document.getElementById(loadingId)?.remove();
+          
+          appendMessage(
+            "I encountered an unexpected issue while processing that request. Please try rephrasing or checking your connection.", 
+            "system"
+          );
         }
-      }
 
       function renderGraph(instance, data, title, type) {
         instance.resize();

@@ -31,18 +31,6 @@ def generate_semantic_artifact(enriched_metadata):
     response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
     return json.loads(response.text)
 
-def parse_user_intent(user_query, golden_artifact):
-    prompt = f"""
-    You are an Executive AI Analyst. Evaluate this input: "{user_query}"
-    If it is a greeting or casual conversation, return exactly:
-    {{ "intent_type": "chat", "message": "Hello. I am connected to your data workspace and ready to run safe analytics requests. What can I analyze for you today?" }}
-    
-    If it is data lookup, analyze it using ONLY this verified schema map: {json.dumps(golden_artifact)}
-    Return exactly:
-    {{ "intent_type": "query", "selected_metrics": ["m1"], "selected_dimensions": ["d1"], "filters": [], "limit": 10 }}
-    """
-    response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-    return json.loads(response.text)
 
 def generate_business_insight(user_query, data_results):
     prompt = f"""User asked: "{user_query}"\nData returned: {json.dumps(data_results)}\nWrite an explicit executive 2-sentence analytics summary."""

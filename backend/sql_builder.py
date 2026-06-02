@@ -2,7 +2,7 @@ import google.generativeai as genai
 import os
 import json
 from dotenv import load_dotenv
-
+import re
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-2.5-flash')
@@ -80,6 +80,9 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact):
 
 
 def execute_live_sql(conn, sql_query, database, schema):
+    if not is_safe_sql(sql_query):
+        raise Exception("Security Error: Query blocked. Destructive operations (DROP, DELETE, UPDATE, etc.) are strictly prohibited.")
+        
     cursor = conn.cursor()
     try:
         cursor.execute('USE ROLE "PUBLIC"')
@@ -108,3 +111,37 @@ def execute_live_sql(conn, sql_query, database, schema):
         raise Exception(f"SQL Execution Failed: {str(e)}")
     finally:
         cursor.close()
+
+def is_safe_sql(sql_query):
+    forbidden_pattern = re.compile(r'(?i)\b(drop|delete|update|insert|alter|grant|revoke|truncate|create|replace)\b')
+    if forbidden_pattern.search(sql_query):
+        return False
+    return True
+
+def fix_snowflake_sql(bad_sql, error_msg, golden_artifact):
+    blueprint_str = json.dumps(golden_artifact, default=str)
+    
+    prompt = f"""
+    You are an automated Data Engineering script. Your previous Snowflake query failed.
+    
+    ORIGINAL QUERY: {bad_sql}
+    SNOWFLAKE ERROR: {error_msg}
+    VALID SCHEMA MAP: {blueprint_str}
+    
+    Fix the SQL query based on the error. Output ONLY a strict JSON object with the fixed SQL. No markdown wrappers.
+    {{
+      "sql": "SELECT ..."
+    }}
+    """
+    
+    response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+    
+    try:
+        raw_text = response.text.strip()
+        start_idx = raw_text.find('{')
+        end_idx = raw_text.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            return json.loads(raw_text[start_idx:end_idx+1])
+        return {"sql": bad_sql} 
+    except Exception:
+        return {"sql": bad_sql}

@@ -6,8 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from backend.snowflake_db import get_snowflake_connection, fetch_databases, fetch_schemas, fetch_tables, extract_table_metadata
 from backend.ai_engine import  generate_business_insight, generate_semantic_artifact
-from backend.sql_builder import generate_snowflake_sql, execute_live_sql
-
+from backend.sql_builder import generate_snowflake_sql, execute_live_sql, fix_snowflake_sql
 app = FastAPI()
 
 app.add_middleware(
@@ -128,7 +127,21 @@ def analyze_data(req: QueryRequest):
         executed_charts = []
         for chart in config.get("charts", []):
             sql = chart.get("sql")
-            chart_data = execute_live_sql(conn, sql, database, schema)
+            chart_data = None
+            
+            try:
+                chart_data = execute_live_sql(conn, sql, database, schema)
+            except Exception as e:
+                error_str = str(e)
+                if "Security Error" in error_str:
+                    continue
+                    
+                try:
+                    fixed_config = fix_snowflake_sql(sql, error_str, schema_map)
+                    sql = fixed_config.get("sql", sql) 
+                    chart_data = execute_live_sql(conn, sql, database, schema)
+                except Exception as inner_e:
+                    continue
             
             if chart_data:
                 executed_charts.append({
