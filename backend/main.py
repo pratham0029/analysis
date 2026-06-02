@@ -41,12 +41,12 @@ USER_SCHEMAS = {}
 def connect_init(req: BaseConnection):
     global ACTIVE_CONNECTIONS
     try:
-        if req.user in ACTIVE_CONNECTIONS:
-            try: ACTIVE_CONNECTIONS[req.user].close()
-            except: pass
-            
-        conn = get_snowflake_connection(SNOWFLAKE_ACCOUNT, req.user)
-        ACTIVE_CONNECTIONS[req.user] = conn
+        # Re-use connection if it already exists to avoid Okta re-prompts!
+        if req.user not in ACTIVE_CONNECTIONS:
+            conn = get_snowflake_connection(SNOWFLAKE_ACCOUNT, req.user)
+            ACTIVE_CONNECTIONS[req.user] = conn
+        else:
+            conn = ACTIVE_CONNECTIONS[req.user]
         
         databases = fetch_databases(conn)
         return {"status": "success", "databases": databases}
@@ -102,11 +102,8 @@ def restore_session(req: SessionRequest):
 
 @app.post("/api/disconnect")
 def disconnect_session(req: SessionRequest):
-    global ACTIVE_CONNECTIONS, USER_SCHEMAS
-    if req.user in ACTIVE_CONNECTIONS:
-        try: ACTIVE_CONNECTIONS[req.user].close()
-        except: pass
-        del ACTIVE_CONNECTIONS[req.user]
+    global USER_SCHEMAS
+    # ONLY delete their loaded tables, NOT their Snowflake connection!
     if req.user in USER_SCHEMAS:
         del USER_SCHEMAS[req.user]
     return {"status": "success"}
