@@ -1,319 +1,830 @@
-<div class="flex-1 bg-slate-50 px-8 pt-12 pb-8 flex flex-col justify-start items-center relative overflow-y-auto custom-scroll">
-        <div id="empty-state" class="text-center mt-32">
-            <div class="w-12 h-12 border border-slate-200 rounded-xl flex items-center justify-center mx-auto mb-3 bg-white shadow-sm">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-            </div>
-            <h3 class="text-sm font-medium text-slate-700">Canvas Inactive</h3>
-            <p class="text-xs text-slate-400 mt-0.5">Please sign in and select your tables to begin.</p>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Colpal AI Analyst</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: "#fff1f2",
+                100: "#ffe4e6",
+                600: "#e11d48",
+                700: "#be123c",
+                900: "#4c0519",
+              },
+              slate: {
+                50: "#f8fafc",
+                100: "#f1f5f9",
+                800: "#1e293b",
+                900: "#0f172a",
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+      @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
+      body {
+        background-color: #f1f5f9;
+        color: #0f172a;
+        font-family: "Inter", sans-serif;
+      }
+      .premium-panel {
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        box-shadow:
+          0 1px 3px rgba(0, 0, 0, 0.02),
+          0 8px 24px rgba(0, 0, 0, 0.04);
+      }
+      .input-premium {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        transition: all 0.2s ease;
+        outline: none;
+      }
+      .input-premium:focus {
+        border-color: #e11d48;
+        background: #ffffff;
+        box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.1);
+      }
+      select.native-dropdown {
+        appearance: none;
+        background-image: url("data:image/svg+xml;utf8,<svg fill='%2364748b' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+      }
+      .font-code {
+        font-family: "JetBrains Mono", monospace;
+      }
+      .custom-scroll::-webkit-scrollbar {
+        height: 6px;
+        width: 6px;
+      }
+      .custom-scroll::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body class="h-screen w-screen flex overflow-hidden antialiased">
+    <!-- LEFT DRAWER -->
+    <div
+      class="w-[420px] bg-white border-r border-slate-200/80 flex flex-col p-6 flex-shrink-0 z-10 shadow-sm"
+    >
+      <div class="mb-6 flex justify-between items-start">
+        <div class="flex items-center gap-3">
+          <div class="w-2.5 h-6 bg-brand-600 rounded-sm"></div>
+          <div>
+            <h1 class="text-md font-semibold tracking-tight text-slate-900">
+              Data Intelligence Workspace
+            </h1>
+            <p
+              class="text-[10px] text-slate-400 uppercase tracking-widest font-medium"
+            >
+              Colpal AI Analyst
+            </p>
+          </div>
+        </div>
+        <button
+          id="reset-btn"
+          class="hidden text-slate-400 hover:text-brand-600 transition-colors mt-1"
+          title="Disconnect Session"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+            <line x1="12" y1="2" x2="12" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-6 pr-1 pb-4 custom-scroll">
+        <div id="step-1-container" class="space-y-3">
+          <label
+            class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block"
+            >1. Connect to Snowflake</label
+          >
+          <input
+            type="text"
+            id="sf-user"
+            placeholder="Corporate SSO Email"
+            class="w-full input-premium rounded-xl p-3.5 text-sm text-slate-800"
+          />
+          <button
+            id="connect-btn"
+            class="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 rounded-xl text-sm transition-all shadow-sm"
+          >
+            Sign in via SSO
+          </button>
         </div>
 
-        <div id="canvas-content" class="w-full max-w-4xl flex flex-col gap-6 hidden pb-12">
-            
-            <div id="analysis-results" class="flex flex-col gap-6 hidden">
-                <div class="premium-panel p-6 rounded-2xl relative bg-white">
-                    <div class="absolute top-0 bottom-0 left-0 w-1 bg-brand-600"></div>
-                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">AI Executive Summary</h4>
-                    <p id="insight-text" class="text-base text-slate-700 font-normal leading-relaxed"></p>
-                </div>
-                
-                <div id="dynamic-charts-wrapper" class="flex flex-col gap-6 w-full"></div>
-
-                <div class="premium-panel p-5 rounded-xl bg-slate-50 border border-slate-200">
-                    <div class="flex items-center gap-2 mb-3">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                        <h4 class="text-xs font-semibold text-slate-600 uppercase tracking-wider">Query Details</h4>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4 mb-3 pb-3 border-b border-slate-200 items-start">
-                        <div><p class="text-[10px] text-slate-400 uppercase font-medium">Database</p><p id="ctx-db" class="text-xs text-slate-800 font-medium break-words"></p></div>
-                        <div><p class="text-[10px] text-slate-400 uppercase font-medium">Schema</p><p id="ctx-schema" class="text-xs text-slate-800 font-medium break-words"></p></div>
-                        <div><p class="text-[10px] text-slate-400 uppercase font-medium">Target Tables</p><p id="ctx-tables" class="text-xs text-slate-800 font-medium break-words"></p></div>
-                    </div>
-                    <div id="ctx-sql-wrapper" class="space-y-4">
-                        </div>
-                </div>
-            </div>
-
-            <div id="semantic-context-panel" class="premium-panel p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hidden">
-                <div class="flex items-center gap-3 mb-4 border-b border-slate-100 pb-4">
-                    <div class="p-2 bg-blue-50 rounded-lg">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                    </div>
-                    <div>
-                        <h4 class="text-sm font-semibold text-slate-800 tracking-tight">Semantic Blueprint Generated</h4>
-                        <p class="text-[10px] text-slate-400 uppercase tracking-widest font-medium">AI Table Analysis Complete</p>
-                    </div>
-                </div>
-                <p id="semantic-description" class="text-sm text-slate-600 mb-5 leading-relaxed"></p>
-                <div>
-                    <p class="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-wider">Golden Artifact JSON Map</p>
-                    <div class="bg-[#0f172a] rounded-xl p-4 overflow-x-auto custom-scroll border border-slate-800 shadow-inner">
-                        <pre><code id="semantic-json" class="font-code text-xs text-blue-300 whitespace-pre"></code></pre>
-                    </div>
-                </div>
-            </div>
+        <div id="cascade-panel" class="space-y-4 hidden">
+          <div
+            class="text-[11px] font-bold text-slate-400 uppercase tracking-wider border-t border-slate-100 pt-4 mb-2"
+          >
+            2. Select Data Sources
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-slate-500 block mb-1"
+              >Database</label
+            >
+            <select
+              id="db-select"
+              class="w-full native-dropdown input-premium rounded-xl p-3 text-sm text-slate-700 cursor-pointer"
+            ></select>
+          </div>
+          <div id="schema-block" class="space-y-1 hidden">
+            <label class="text-xs font-medium text-slate-500 block mb-1 mt-3"
+              >Schema</label
+            >
+            <input
+              type="text"
+              id="schema-search"
+              placeholder="Search schemas..."
+              class="w-full input-premium rounded-t-lg p-2 text-xs border-b-0"
+            />
+            <div
+              id="schema-list-box"
+              class="max-h-[140px] overflow-y-auto border border-slate-200 rounded-b-lg p-2 bg-slate-50/50 space-y-1 custom-scroll"
+            ></div>
+          </div>
+          <div id="table-block" class="space-y-1 hidden">
+            <label class="text-xs font-medium text-slate-500 block mb-1 mt-3"
+              >Tables & Views</label
+            >
+            <input
+              type="text"
+              id="table-search"
+              placeholder="Search tables..."
+              class="w-full input-premium rounded-t-lg p-2 text-xs border-b-0"
+            />
+            <div
+              id="table-list-box"
+              class="max-h-[160px] overflow-y-auto border border-slate-200 rounded-b-lg p-2 bg-slate-50/50 space-y-1 custom-scroll"
+            ></div>
+            <button
+              id="profile-btn"
+              class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 rounded-xl text-sm transition-all shadow-sm mt-3"
+            >
+              Load Selected Tables
+            </button>
+          </div>
         </div>
+
+        <div
+          id="chat-panel"
+          class="space-y-3 hidden border-t border-slate-100 pt-4 flex flex-col min-h-0 h-full"
+        >
+          <label
+            class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block"
+            >3. Ask the AI</label
+          >
+          <div
+            id="chat-history"
+            class="flex-1 overflow-y-auto space-y-4 pr-1 text-xs custom-scroll"
+          ></div>
+          <div class="relative mt-2">
+            <input
+              type="text"
+              id="user-input"
+              class="w-full input-premium text-slate-800 rounded-xl py-3.5 pl-4 pr-12 text-sm"
+              placeholder="Ask a question about your data..."
+            />
+            <button
+              id="send-btn"
+              class="absolute right-2 top-2 bottom-2 bg-brand-600 hover:bg-brand-700 text-white px-3.5 rounded-lg flex items-center justify-center transition-colors"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <p
+        id="error-log"
+        class="text-brand-700 text-xs mt-2 hidden bg-brand-50 p-3 rounded-xl border border-brand-100 text-center font-medium"
+      ></p>
+    </div>
+
+    <!-- MAIN INTERACTIVE CANVAS -->
+    <div
+      class="flex-1 bg-slate-50 px-8 pt-12 pb-8 flex flex-col justify-start items-center relative overflow-y-auto custom-scroll"
+    >
+      <div id="empty-state" class="text-center mt-32">
+        <div
+          class="w-12 h-12 border border-slate-200 rounded-xl flex items-center justify-center mx-auto mb-3 bg-white shadow-sm"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#e11d48"
+            stroke-width="2"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="3" y1="9" x2="21" y2="9"></line>
+            <line x1="9" y1="21" x2="9" y2="9"></line>
+          </svg>
+        </div>
+        <h3 class="text-sm font-medium text-slate-700">Canvas Inactive</h3>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Please sign in and select your tables to begin.
+        </p>
+      </div>
+
+      <div
+        id="canvas-content"
+        class="w-full max-w-4xl flex flex-col gap-6 hidden pb-12"
+      >
+        <div id="analysis-results" class="flex flex-col gap-6 hidden">
+          <div class="premium-panel p-6 rounded-2xl relative bg-white">
+            <div class="absolute top-0 bottom-0 left-0 w-1 bg-brand-600"></div>
+            <h4
+              class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1"
+            >
+              AI Executive Summary
+            </h4>
+            <p
+              id="insight-text"
+              class="text-base text-slate-700 font-normal leading-relaxed"
+            ></p>
+          </div>
+
+          <div
+            id="dynamic-charts-wrapper"
+            class="flex flex-col gap-6 w-full"
+          ></div>
+
+          <div
+            class="premium-panel p-5 rounded-xl bg-slate-50 border border-slate-200"
+          >
+            <div class="flex items-center gap-2 mb-3">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#64748b"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <h4
+                class="text-xs font-semibold text-slate-600 uppercase tracking-wider"
+              >
+                Query Details
+              </h4>
+            </div>
+            <div
+              class="grid grid-cols-3 gap-4 mb-3 pb-3 border-b border-slate-200 items-start"
+            >
+              <div>
+                <p class="text-[10px] text-slate-400 uppercase font-medium">
+                  Database
+                </p>
+                <p
+                  id="ctx-db"
+                  class="text-xs text-slate-800 font-medium break-words"
+                ></p>
+              </div>
+              <div>
+                <p class="text-[10px] text-slate-400 uppercase font-medium">
+                  Schema
+                </p>
+                <p
+                  id="ctx-schema"
+                  class="text-xs text-slate-800 font-medium break-words"
+                ></p>
+              </div>
+              <div>
+                <p class="text-[10px] text-slate-400 uppercase font-medium">
+                  Target Tables
+                </p>
+                <p
+                  id="ctx-tables"
+                  class="text-xs text-slate-800 font-medium break-words"
+                ></p>
+              </div>
+            </div>
+            <div id="ctx-sql-wrapper" class="space-y-4"></div>
+          </div>
+        </div>
+
+        <div
+          id="semantic-context-panel"
+          class="premium-panel p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hidden"
+        >
+          <div
+            class="flex items-center gap-3 mb-4 border-b border-slate-100 pb-4"
+          >
+            <div class="p-2 bg-blue-50 rounded-lg">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#2563eb"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
+                ></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+              </svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-semibold text-slate-800 tracking-tight">
+                Semantic Blueprint Generated
+              </h4>
+              <p
+                class="text-[10px] text-slate-400 uppercase tracking-widest font-medium"
+              >
+                AI Table Analysis Complete
+              </p>
+            </div>
+          </div>
+          <p
+            id="semantic-description"
+            class="text-sm text-slate-600 mb-5 leading-relaxed"
+          ></p>
+          <div>
+            <p
+              class="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-wider"
+            >
+              Golden Artifact JSON Map
+            </p>
+            <div
+              class="bg-[#0f172a] rounded-xl p-4 overflow-x-auto custom-scroll border border-slate-800 shadow-inner"
+            >
+              <pre><code id="semantic-json" class="font-code text-xs text-blue-300 whitespace-pre"></code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
-        document.getElementById('connect-btn').addEventListener('click', initSSO);
-        document.getElementById('db-select').addEventListener('change', loadSchemas);
-        document.getElementById('profile-btn').addEventListener('click', runMappingProfile);
-        document.getElementById('send-btn').addEventListener('click', runAnalysis);
-        document.getElementById('user-input').addEventListener('keypress', e => { if (e.key === 'Enter') runAnalysis(); });
-        document.getElementById('reset-btn').addEventListener('click', disconnectSession);
-
-        let authCache = {};
-
-        function populateSemanticPanel(artifact) {
-            document.getElementById('empty-state').classList.add('hidden');
-            document.getElementById('canvas-content').classList.remove('hidden');
-            document.getElementById('semantic-context-panel').classList.remove('hidden');
-            document.getElementById('semantic-description').innerText = artifact.description || "No description generated.";
-            const artifactClone = { ...artifact };
-            delete artifactClone.description;
-            document.getElementById('semantic-json').innerText = JSON.stringify(artifactClone, null, 2);
-        }
-
-        window.addEventListener('DOMContentLoaded', async () => {
-            const savedSession = localStorage.getItem('nexus_session');
-            if (savedSession) {
-                authCache = JSON.parse(savedSession);
-                try {
-                    const res = await fetch('/api/restore-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: authCache.user }) });
-                    if (res.ok) {
-                        const data = await res.json();
-                        document.getElementById('step-1-container').classList.add('hidden');
-                        document.getElementById('chat-panel').classList.remove('hidden');
-                        document.getElementById('reset-btn').classList.remove('hidden');
-                        populateSemanticPanel(data.context.metadata);
-                        appendMessage("Session restored successfully. Blueprint loaded.", "system");
-                    } else { localStorage.removeItem('nexus_session'); }
-                } catch(e) { localStorage.removeItem('nexus_session'); }
-            }
+      document.getElementById("connect-btn").addEventListener("click", initSSO);
+      document
+        .getElementById("db-select")
+        .addEventListener("change", loadSchemas);
+      document
+        .getElementById("profile-btn")
+        .addEventListener("click", runMappingProfile);
+      document
+        .getElementById("send-btn")
+        .addEventListener("click", runAnalysis);
+      document
+        .getElementById("user-input")
+        .addEventListener("keypress", (e) => {
+          if (e.key === "Enter") runAnalysis();
         });
+      document
+        .getElementById("reset-btn")
+        .addEventListener("click", disconnectSession);
 
-        async function disconnectSession() {
-            if (authCache.user) { await fetch('/api/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: authCache.user }) }); }
-            localStorage.removeItem('nexus_session');
-            location.reload();
-        }
+      let authCache = {};
 
-        function attachCssSearchFilter(inputId, itemClass) {
-            const styleId = inputId + '-style';
-            let styleEl = document.getElementById(styleId);
-            if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = styleId; document.head.appendChild(styleEl); }
-            document.getElementById(inputId).addEventListener('input', function(e) {
-                requestAnimationFrame(() => {
-                    const term = e.target.value.trim().replace(/["\\\\]/g, ''); 
-                    if (!term) { styleEl.innerHTML = ''; } 
-                    else { styleEl.innerHTML = `.${itemClass} { display: none !important; } .${itemClass}[data-name*="${term}" i] { display: flex !important; }`; }
-                });
+      function populateSemanticPanel(artifact) {
+        document.getElementById("empty-state").classList.add("hidden");
+        document.getElementById("canvas-content").classList.remove("hidden");
+        document
+          .getElementById("semantic-context-panel")
+          .classList.remove("hidden");
+        document.getElementById("semantic-description").innerText =
+          artifact.description || "No description generated.";
+        const artifactClone = { ...artifact };
+        delete artifactClone.description;
+        document.getElementById("semantic-json").innerText = JSON.stringify(
+          artifactClone,
+          null,
+          2,
+        );
+      }
+
+      window.addEventListener("DOMContentLoaded", async () => {
+        const savedSession = localStorage.getItem("nexus_session");
+        if (savedSession) {
+          authCache = JSON.parse(savedSession);
+          try {
+            const res = await fetch("/api/restore-session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ user: authCache.user }),
             });
-        }
-        attachCssSearchFilter('schema-search', 'schema-item');
-        attachCssSearchFilter('table-search', 'table-item');
-
-        async function initSSO() {
-            const btn = document.getElementById('connect-btn');
-            const err = document.getElementById('error-log');
-            authCache = { user: document.getElementById('sf-user').value.trim() };
-            if (!authCache.user) { err.innerText = "Please input a valid identity login route."; err.classList.remove('hidden'); return; }
-            btn.disabled = true; btn.innerText = "Waiting for Okta Authentication..."; btn.classList.add('opacity-75'); err.classList.add('hidden');
-            try {
-                const response = await fetch('/api/connect-init', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(authCache) });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || "Handshake rejected.");
-                document.getElementById('step-1-container').classList.add('hidden');
-                document.getElementById('reset-btn').classList.remove('hidden');
-                document.getElementById('cascade-panel').classList.remove('hidden');
-                const dbSelect = document.getElementById('db-select');
-                const optionsHTML = data.databases.map(db => `<option value="${db}">${db}</option>`).join('');
-                dbSelect.innerHTML = '<option value="" disabled selected>Select database...</option>' + optionsHTML;
-            } catch (e) {
-                err.innerText = e.message; err.classList.remove('hidden');
-                btn.disabled = false; btn.innerText = "Sign in via SSO"; btn.classList.remove('opacity-75');
+            if (res.ok) {
+              const data = await res.json();
+              document
+                .getElementById("step-1-container")
+                .classList.add("hidden");
+              document.getElementById("chat-panel").classList.remove("hidden");
+              document.getElementById("reset-btn").classList.remove("hidden");
+              populateSemanticPanel(data.context.metadata);
+              appendMessage(
+                "Session restored successfully. Blueprint loaded.",
+                "system",
+              );
+            } else {
+              localStorage.removeItem("nexus_session");
             }
+          } catch (e) {
+            localStorage.removeItem("nexus_session");
+          }
         }
+      });
 
-        async function loadSchemas(e) {
-            authCache.database = e.target.value;
-            document.getElementById('schema-block').classList.add('hidden');
-            document.getElementById('table-block').classList.add('hidden');
-            try {
-                const response = await fetch('/api/get-schemas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(authCache) });
-                const data = await response.json();
-                const box = document.getElementById('schema-list-box');
-                box.innerHTML = data.schemas.map(sc => `<label class="schema-item flex items-center gap-2 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-xs transition-all" data-name="${sc}"><input type="radio" name="schema_choice" value="${sc}" class="accent-brand-600 cursor-pointer"><span class="text-slate-700 font-medium truncate">${sc}</span></label>`).join('');
-                document.querySelectorAll('input[name="schema_choice"]').forEach(radio => { radio.addEventListener('change', loadTables); });
-                document.getElementById('schema-search').value = ''; document.getElementById('schema-search-style').innerHTML = '';
-                document.getElementById('schema-block').classList.remove('hidden');
-            } catch(e) { console.error(e); }
+      async function disconnectSession() {
+        if (authCache.user) {
+          await fetch("/api/disconnect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user: authCache.user }),
+          });
         }
+        localStorage.removeItem("nexus_session");
+        location.reload();
+      }
 
-        async function loadTables(e) {
-            authCache.schema_name = e.target.value;
-            document.getElementById('table-block').classList.add('hidden');
-            try {
-                const response = await fetch('/api/get-tables', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(authCache) });
-                const data = await response.json();
-                const box = document.getElementById('table-list-box');
-                box.innerHTML = data.tables.map(t => `<div class="table-item overflow-x-auto custom-scroll flex items-center p-2 rounded-lg hover:bg-slate-100 border border-transparent hover:border-slate-200/60 transition-all" data-name="${t.name}"><div class="flex items-center gap-3 w-max min-w-full"><input type="checkbox" value="${t.name}" class="table-chk accent-brand-600 rounded cursor-pointer flex-shrink-0"><span class="text-slate-700 font-medium text-xs whitespace-nowrap">${t.name}</span><span class="text-[9px] text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded ml-auto uppercase font-semibold bg-white flex-shrink-0">${t.type}</span></div></div>`).join('');
-                document.getElementById('table-search').value = ''; document.getElementById('table-search-style').innerHTML = '';
-                document.getElementById('table-block').classList.remove('hidden');
-            } catch(e) { console.error(e); }
+      function attachCssSearchFilter(inputId, itemClass) {
+        const styleId = inputId + "-style";
+        let styleEl = document.getElementById(styleId);
+        if (!styleEl) {
+          styleEl = document.createElement("style");
+          styleEl.id = styleId;
+          document.head.appendChild(styleEl);
         }
+        document
+          .getElementById(inputId)
+          .addEventListener("input", function (e) {
+            requestAnimationFrame(() => {
+              const term = e.target.value.trim().replace(/["\\\\]/g, "");
+              if (!term) {
+                styleEl.innerHTML = "";
+              } else {
+                styleEl.innerHTML = `.${itemClass} { display: none !important; } .${itemClass}[data-name*="${term}" i] { display: flex !important; }`;
+              }
+            });
+          });
+      }
+      attachCssSearchFilter("schema-search", "schema-item");
+      attachCssSearchFilter("table-search", "table-item");
 
-        async function runMappingProfile() {
-            const checked = document.querySelectorAll('.table-chk:checked');
-            const tableList = Array.from(checked).map(c => c.value);
-            if(tableList.length === 0) return;
-            const btn = document.getElementById('profile-btn');
-            btn.innerText = "Analyzing schemas..."; btn.disabled = true;
-            try {
-                const response = await fetch('/api/profile-selection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...authCache, tables: tableList }) });
-                const data = await response.json();
-                if(response.ok) {
-                    localStorage.setItem('nexus_session', JSON.stringify(authCache));
-                    document.getElementById('cascade-panel').classList.add('hidden');
-                    document.getElementById('chat-panel').classList.remove('hidden');
-                    populateSemanticPanel(data.artifact);
-                    appendMessage("Tables successfully loaded and analyzed! You can now ask questions.", "system");
-                }
-            } catch(e) { console.error(e); btn.innerText = "Load Selected Tables"; btn.disabled = false; }
+      async function initSSO() {
+        const btn = document.getElementById("connect-btn");
+        const err = document.getElementById("error-log");
+        authCache = { user: document.getElementById("sf-user").value.trim() };
+        if (!authCache.user) {
+          err.innerText = "Please input a valid identity login route.";
+          err.classList.remove("hidden");
+          return;
         }
+        btn.disabled = true;
+        btn.innerText = "Waiting for Okta Authentication...";
+        btn.classList.add("opacity-75");
+        err.classList.add("hidden");
+        try {
+          const response = await fetch("/api/connect-init", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(authCache),
+          });
+          const data = await response.json();
+          if (!response.ok)
+            throw new Error(data.detail || "Handshake rejected.");
+          document.getElementById("step-1-container").classList.add("hidden");
+          document.getElementById("reset-btn").classList.remove("hidden");
+          document.getElementById("cascade-panel").classList.remove("hidden");
+          const dbSelect = document.getElementById("db-select");
+          const optionsHTML = data.databases
+            .map((db) => `<option value="${db}">${db}</option>`)
+            .join("");
+          dbSelect.innerHTML =
+            '<option value="" disabled selected>Select database...</option>' +
+            optionsHTML;
+        } catch (e) {
+          err.innerText = e.message;
+          err.classList.remove("hidden");
+          btn.disabled = false;
+          btn.innerText = "Sign in via SSO";
+          btn.classList.remove("opacity-75");
+        }
+      }
 
-        async function runAnalysis() {
-            const input = document.getElementById('user-input');
-            const query = input.value.trim(); if(!query) return;
-            input.value = ''; appendMessage(query, 'user');
+      async function loadSchemas(e) {
+        authCache.database = e.target.value;
+        document.getElementById("schema-block").classList.add("hidden");
+        document.getElementById("table-block").classList.add("hidden");
+        try {
+          const response = await fetch("/api/get-schemas", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(authCache),
+          });
+          const data = await response.json();
+          const box = document.getElementById("schema-list-box");
+          box.innerHTML = data.schemas
+            .map(
+              (sc) =>
+                `<label class="schema-item flex items-center gap-2 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-xs transition-all" data-name="${sc}"><input type="radio" name="schema_choice" value="${sc}" class="accent-brand-600 cursor-pointer"><span class="text-slate-700 font-medium truncate">${sc}</span></label>`,
+            )
+            .join("");
+          document
+            .querySelectorAll('input[name="schema_choice"]')
+            .forEach((radio) => {
+              radio.addEventListener("change", loadTables);
+            });
+          document.getElementById("schema-search").value = "";
+          document.getElementById("schema-search-style").innerHTML = "";
+          document.getElementById("schema-block").classList.remove("hidden");
+        } catch (e) {
+          console.error(e);
+        }
+      }
 
-            const history = document.getElementById('chat-history');
-            const loadingId = 'loading-' + Date.now();
-            const loadingBubble = document.createElement('div');
-            loadingBubble.id = loadingId;
-            loadingBubble.className = `p-3.5 rounded-xl max-w-[85%] w-fit chat-system animate-pulse text-slate-400 italic text-xs`;
-            loadingBubble.innerText = "Analyzing data framework...";
-            history.appendChild(loadingBubble); history.scrollTop = history.scrollHeight;
+      async function loadTables(e) {
+        authCache.schema_name = e.target.value;
+        document.getElementById("table-block").classList.add("hidden");
+        try {
+          const response = await fetch("/api/get-tables", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(authCache),
+          });
+          const data = await response.json();
+          const box = document.getElementById("table-list-box");
+          box.innerHTML = data.tables
+            .map(
+              (t) =>
+                `<div class="table-item overflow-x-auto custom-scroll flex items-center p-2 rounded-lg hover:bg-slate-100 border border-transparent hover:border-slate-200/60 transition-all" data-name="${t.name}"><div class="flex items-center gap-3 w-max min-w-full"><input type="checkbox" value="${t.name}" class="table-chk accent-brand-600 rounded cursor-pointer flex-shrink-0"><span class="text-slate-700 font-medium text-xs whitespace-nowrap">${t.name}</span><span class="text-[9px] text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded ml-auto uppercase font-semibold bg-white flex-shrink-0">${t.type}</span></div></div>`,
+            )
+            .join("");
+          document.getElementById("table-search").value = "";
+          document.getElementById("table-search-style").innerHTML = "";
+          document.getElementById("table-block").classList.remove("hidden");
+        } catch (e) {
+          console.error(e);
+        }
+      }
 
-            try {
-                const response = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: authCache.user, query: query }) });
-                const result = await response.json();
-                document.getElementById(loadingId)?.remove();
+      async function runMappingProfile() {
+        const checked = document.querySelectorAll(".table-chk:checked");
+        const tableList = Array.from(checked).map((c) => c.value);
+        if (tableList.length === 0) return;
+        const btn = document.getElementById("profile-btn");
+        btn.innerText = "Analyzing schemas...";
+        btn.disabled = true;
+        try {
+          const response = await fetch("/api/profile-selection", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...authCache, tables: tableList }),
+          });
+          const data = await response.json();
+          if (response.ok) {
+            localStorage.setItem("nexus_session", JSON.stringify(authCache));
+            document.getElementById("cascade-panel").classList.add("hidden");
+            document.getElementById("chat-panel").classList.remove("hidden");
+            populateSemanticPanel(data.artifact);
+            appendMessage(
+              "Tables successfully loaded and analyzed! You can now ask questions.",
+              "system",
+            );
+          }
+        } catch (e) {
+          console.error(e);
+          btn.innerText = "Load Selected Tables";
+          btn.disabled = false;
+        }
+      }
 
-                if (result.type === 'chat') {
-                    appendMessage(result.message, 'system'); return;
-                }
-                
-                appendMessage("Analysis complete. Visual rendering loaded.", 'system');
-                document.getElementById('analysis-results').classList.remove('hidden');
-                
-                if(result.context) {
-                    document.getElementById('ctx-db').innerText = result.context.database;
-                    document.getElementById('ctx-schema').innerText = result.context.schema;
-                    document.getElementById('ctx-tables').innerText = result.context.tables.join(', ');
-                }
-                document.getElementById('insight-text').innerText = result.insight;
-                
-                // DYNAMICALLY GENERATE CHARTS AND SQL PANELS
-                const chartWrapper = document.getElementById('dynamic-charts-wrapper');
-                const sqlWrapper = document.getElementById('ctx-sql-wrapper');
-                
-                chartWrapper.innerHTML = '';
-                sqlWrapper.innerHTML = '';
+      async function runAnalysis() {
+        const input = document.getElementById("user-input");
+        const query = input.value.trim();
+        if (!query) return;
+        input.value = "";
+        appendMessage(query, "user");
 
-                result.charts.forEach((chartData, idx) => {
-                    // Create visual chart container
-                    const chartId = `chart-instance-${Date.now()}-${idx}`;
-                    const chartDiv = document.createElement('div');
-                    chartDiv.className = "premium-panel p-6 rounded-2xl h-[450px] bg-white";
-                    chartDiv.innerHTML = `<div id="${chartId}" class="w-full h-full"></div>`;
-                    chartWrapper.appendChild(chartDiv);
+        const history = document.getElementById("chat-history");
+        const loadingId = "loading-" + Date.now();
+        const loadingBubble = document.createElement("div");
+        loadingBubble.id = loadingId;
+        loadingBubble.className = `p-3.5 rounded-xl max-w-[85%] w-fit chat-system animate-pulse text-slate-400 italic text-xs`;
+        loadingBubble.innerText = "Analyzing data framework...";
+        history.appendChild(loadingBubble);
+        history.scrollTop = history.scrollHeight;
 
-                    // Render ECharts
-                    const chartInstance = echarts.init(document.getElementById(chartId));
-                    renderGraph(chartInstance, chartData.data, chartData.chart_title, chartData.chart_type);
+        try {
+          const response = await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user: authCache.user, query: query }),
+          });
+          const result = await response.json();
+          document.getElementById(loadingId)?.remove();
 
-                    // Add SQL query to the bottom panel
-                    const sqlDiv = document.createElement('div');
-                    sqlDiv.innerHTML = `
-                        <p class="text-[10px] text-slate-400 uppercase font-medium mb-1">${chartData.chart_title} - Generated SQL</p>
+          if (result.type === "chat") {
+            appendMessage(result.message, "system");
+            return;
+          }
+
+          appendMessage(
+            "Analysis complete. Visual rendering loaded.",
+            "system",
+          );
+          document
+            .getElementById("analysis-results")
+            .classList.remove("hidden");
+
+          if (result.context) {
+            document.getElementById("ctx-db").innerText =
+              result.context.database;
+            document.getElementById("ctx-schema").innerText =
+              result.context.schema;
+            document.getElementById("ctx-tables").innerText =
+              result.context.tables.join(", ");
+          }
+          document.getElementById("insight-text").innerText = result.insight;
+
+          // DYNAMICALLY GENERATE CHARTS AND SQL PANELS
+          const chartWrapper = document.getElementById(
+            "dynamic-charts-wrapper",
+          );
+          const sqlWrapper = document.getElementById("ctx-sql-wrapper");
+
+          chartWrapper.innerHTML = "";
+          sqlWrapper.innerHTML = "";
+
+          result.charts.forEach((chartData, idx) => {
+            // Create visual chart container
+            const chartId = `chart-instance-${Date.now()}-${idx}`;
+            const chartDiv = document.createElement("div");
+            chartDiv.className =
+              "premium-panel p-6 rounded-2xl h-[450px] bg-white";
+            chartDiv.innerHTML = `<div id="${chartId}" class="w-full h-full"></div>`;
+            chartWrapper.appendChild(chartDiv);
+
+            // Add SQL query to the bottom panel
+            const sqlDiv = document.createElement("div");
+            sqlDiv.innerHTML = `
+                        <p class="text-[10px] text-slate-400 uppercase font-medium mb-1 mt-4">${chartData.chart_title} - Generated SQL</p>
                         <div class="bg-slate-800 rounded-lg p-3 overflow-x-auto custom-scroll border-l-2 border-brand-500">
                             <code class="font-code text-xs text-green-400 whitespace-pre">${chartData.sql}</code>
                         </div>
                     `;
-                    sqlWrapper.appendChild(sqlDiv);
-                });
+            sqlWrapper.appendChild(sqlDiv);
 
-            } catch(e) { console.error(e); document.getElementById(loadingId)?.remove(); }
+            // FIX: Delay ECharts initialization by 50ms so the browser can paint the DIV height/width first
+            setTimeout(() => {
+              const domElement = document.getElementById(chartId);
+              if (domElement) {
+                const chartInstance = echarts.init(domElement);
+                // Force lowercase just in case Gemini returns "Line" or "Bar"
+                const safeType = (chartData.chart_type || "bar").toLowerCase();
+                renderGraph(
+                  chartInstance,
+                  chartData.data,
+                  chartData.chart_title,
+                  safeType,
+                );
+              }
+            }, 50);
+          });
+        } catch (e) {
+          console.error(e);
+          document.getElementById(loadingId)?.remove();
         }
+      }
 
-        // Updated to accept the specific chart instance
-        function renderGraph(instance, data, title, type) {
-            instance.resize();
-            instance.setOption({
-                backgroundColor: 'transparent',
-                title: {
-                    text: title,
-                    left: 'center',
-                    textStyle: { color: '#1e293b', fontFamily: 'Inter', fontSize: 14, fontWeight: '600' }
-                },
-                tooltip: { 
-                    trigger: 'axis', 
-                    backgroundColor: '#ffffff', 
-                    borderColor: '#e2e8f0', 
-                    textStyle: { color: '#0f172a', fontFamily: 'Inter' },
-                    formatter: function (params) {
-                        let val = params[0].value;
-                        if (val >= 1e6) val = (val / 1e6).toFixed(2) + 'M';
-                        else if (val >= 1e3) val = (val / 1e3).toFixed(2) + 'K';
-                        return `<b>${params[0].name}</b><br/>Metric: ${val}`;
+      // Updated to accept the specific chart instance
+      function renderGraph(instance, data, title, type) {
+        instance.resize();
+        instance.setOption({
+          backgroundColor: "transparent",
+          title: {
+            text: title,
+            left: "center",
+            textStyle: {
+              color: "#1e293b",
+              fontFamily: "Inter",
+              fontSize: 14,
+              fontWeight: "600",
+            },
+          },
+          tooltip: {
+            trigger: "axis",
+            backgroundColor: "#ffffff",
+            borderColor: "#e2e8f0",
+            textStyle: { color: "#0f172a", fontFamily: "Inter" },
+            formatter: function (params) {
+              let val = params[0].value;
+              if (val >= 1e6) val = (val / 1e6).toFixed(2) + "M";
+              else if (val >= 1e3) val = (val / 1e3).toFixed(2) + "K";
+              return `<b>${params[0].name}</b><br/>Metric: ${val}`;
+            },
+          },
+          grid: {
+            top: "15%",
+            right: "4%",
+            bottom: "15%",
+            left: "8%",
+            containLabel: true,
+          },
+          xAxis: {
+            type: "category",
+            data: data.map((i) => i.dimension),
+            axisLine: { lineStyle: { color: "#cbd5e1" } },
+            axisLabel: {
+              color: "#64748b",
+              fontFamily: "Inter",
+              rotate: 25,
+              interval: "auto",
+            },
+          },
+          yAxis: {
+            type: "value",
+            splitLine: { lineStyle: { color: "#f1f5f9", type: "dashed" } },
+            axisLine: { show: false },
+            axisLabel: {
+              color: "#64748b",
+              fontFamily: "Inter",
+              formatter: function (value) {
+                if (value >= 1e6) return (value / 1e6).toFixed(0) + "M";
+                if (value >= 1e3) return (value / 1e3).toFixed(0) + "K";
+                return value;
+              },
+            },
+          },
+          series: [
+            {
+              data: data.map((i) => i.metric),
+              type: type,
+              smooth: type === "line",
+              barWidth: type === "bar" ? "30%" : undefined,
+              showSymbol: type === "line",
+              symbolSize: 6,
+              itemStyle: {
+                color:
+                  type === "bar"
+                    ? new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: "#f43f5e" },
+                        { offset: 1, color: "#be123c" },
+                      ])
+                    : "#e11d48",
+              },
+              lineStyle:
+                type === "line"
+                  ? {
+                      width: 3,
+                      shadowColor: "rgba(225, 29, 72, 0.2)",
+                      shadowBlur: 8,
+                      shadowOffsetY: 3,
                     }
-                },
-                grid: { top: '15%', right: '4%', bottom: '15%', left: '8%', containLabel: true },
-                xAxis: { 
-                    type: 'category', 
-                    data: data.map(i => i.dimension), 
-                    axisLine: { lineStyle: { color: '#cbd5e1' } }, 
-                    axisLabel: { color: '#64748b', fontFamily: 'Inter', rotate: 25, interval: 'auto' } 
-                },
-                yAxis: { 
-                    type: 'value', 
-                    splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }, 
-                    axisLine: { show: false },
-                    axisLabel: { 
-                        color: '#64748b', 
-                        fontFamily: 'Inter',
-                        formatter: function (value) {
-                            if (value >= 1e6) return (value / 1e6).toFixed(0) + 'M';
-                            if (value >= 1e3) return (value / 1e3).toFixed(0) + 'K';
-                            return value;
-                        }
-                    } 
-                },
-                series: [{ 
-                    data: data.map(i => i.metric), 
-                    type: type, 
-                    smooth: type === 'line',
-                    barWidth: type === 'bar' ? '30%' : undefined,
-                    showSymbol: type === 'line',
-                    symbolSize: 6,
-                    itemStyle: { 
-                        color: type === 'bar' 
-                            ? new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#f43f5e' }, { offset: 1, color: '#be123c' }])
-                            : '#e11d48'
-                    },
-                    lineStyle: type === 'line' ? { width: 3, shadowColor: 'rgba(225, 29, 72, 0.2)', shadowBlur: 8, shadowOffsetY: 3 } : undefined
-                }]
-            });
-        }
+                  : undefined,
+            },
+          ],
+        });
+      }
 
-        function appendMessage(text, sender) {
-            const history = document.getElementById('chat-history');
-            const bubble = document.createElement('div');
-            bubble.className = `p-3.5 rounded-xl max-w-[85%] w-fit ${sender === 'user' ? 'chat-user ml-auto' : 'chat-system'}`;
-            bubble.innerText = text; history.appendChild(bubble);
-            history.scrollTop = history.scrollHeight;
-        }
+      function appendMessage(text, sender) {
+        const history = document.getElementById("chat-history");
+        const bubble = document.createElement("div");
+        bubble.className = `p-3.5 rounded-xl max-w-[85%] w-fit ${sender === "user" ? "chat-user ml-auto" : "chat-system"}`;
+        bubble.innerText = text;
+        history.appendChild(bubble);
+        history.scrollTop = history.scrollHeight;
+      }
     </script>
-</body>
+  </body>
 </html>
