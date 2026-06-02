@@ -1,15 +1,14 @@
 import snowflake.connector
 
 def get_snowflake_connection(account, user):
-    """Establishes the initial connection with explicit compute and role configurations."""
     try:
         clean_account = account.replace(".snowflakecomputing.com", "").replace("https://", "")
         conn = snowflake.connector.connect(
             account=clean_account,
             user=user,
             authenticator='externalbrowser',
-            warehouse='VIZ_UTIL_SMALL_WH',  # FIXED: Explicit Compute Engine
-            role='PUBLIC'                   # FIXED: Explicit Role Assignment
+            warehouse='VIZ_UTIL_SMALL_WH',
+            role='PUBLIC'
         )
         return conn
     except Exception as e:
@@ -50,28 +49,22 @@ def fetch_tables(conn, database, schema):
         cursor.close()
 
 def extract_table_metadata(conn, database, schema, tables):
-    """
-    Step 1: Pulls Exact Columns AND 5 Sample Rows for Context.
-    """
     metadata = {}
     cursor = conn.cursor()
     try:
         for table in tables:
             table_data = {}
             
-            # 1. Get Column Definitions
             cursor.execute(f'DESCRIBE TABLE "{database}"."{schema}"."{table}"')
             columns = cursor.fetchall()
             col_names = [col[0] for col in columns]
             table_data["schema"] = [{"column": col[0], "type": col[1]} for col in columns]
             
-            # 2. Get 5 Sample Rows (This will now succeed because we have a warehouse!)
             try:
                 cursor.execute(f'SELECT * FROM "{database}"."{schema}"."{table}" LIMIT 5')
                 sample_rows = cursor.fetchall()
                 table_data["sample_data"] = [dict(zip(col_names, row)) for row in sample_rows]
             except Exception as e:
-                # Fallback if secured view restricts raw SELECT *
                 print(f"Warning: Could not fetch sample data for {table}. Reason: {e}")
                 table_data["sample_data"] = []
                 

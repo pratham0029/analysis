@@ -517,7 +517,6 @@
         const savedSession = localStorage.getItem("nexus_session");
         if (savedSession) {
           authCache = JSON.parse(savedSession);
-          // Just pre-fill the email for convenience, but DO NOT auto-click anything
           document.getElementById("sf-user").value = authCache.user;
 
           try {
@@ -540,12 +539,9 @@
                 "system",
               );
             } else {
-              // FIX: If the server restarted and the session is dead, clear the cache.
-              // Do NOT call initSSO() here. Just wait for the user to click.
               localStorage.removeItem("nexus_session");
             }
           } catch (e) {
-            // FIX: If the backend is unreachable, do nothing. Wait for the user.
             localStorage.removeItem("nexus_session");
           }
         }
@@ -563,7 +559,6 @@
         authCache = { user: savedUser };
         localStorage.setItem("nexus_session", JSON.stringify(authCache));
 
-        // Ensure input fields are completely cleared out
         document.getElementById("schema-search").value = "";
         document.getElementById("table-search").value = "";
 
@@ -641,7 +636,7 @@
           dbSelect.innerHTML =
             '<option value="" disabled selected>Select database...</option>' +
             optionsHTML;
-          dbSelect.selectedIndex = 0; // Force browser to clear cached dropdown ghosting
+          dbSelect.selectedIndex = 0;
         } catch (e) {
           err.innerText = e.message;
           err.classList.remove("hidden");

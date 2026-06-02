@@ -41,7 +41,6 @@ USER_SCHEMAS = {}
 def connect_init(req: BaseConnection):
     global ACTIVE_CONNECTIONS
     try:
-        # Re-use connection if it already exists to avoid Okta re-prompts!
         if req.user not in ACTIVE_CONNECTIONS:
             conn = get_snowflake_connection(SNOWFLAKE_ACCOUNT, req.user)
             ACTIVE_CONNECTIONS[req.user] = conn
@@ -103,7 +102,6 @@ def restore_session(req: SessionRequest):
 @app.post("/api/disconnect")
 def disconnect_session(req: SessionRequest):
     global USER_SCHEMAS
-    # ONLY delete their loaded tables, NOT their Snowflake connection!
     if req.user in USER_SCHEMAS:
         del USER_SCHEMAS[req.user]
     return {"status": "success"}
@@ -122,14 +120,11 @@ def analyze_data(req: QueryRequest):
     schema = active_context.get("schema", "UNKNOWN")
     
     try:
-        # 1. Fetch the advanced Multi-Chart Plan directly (The old gatekeeper is gone!)
         config = generate_snowflake_sql(req.query, raw_metadata, schema_map)
         
-        # 2. Handle Clarifications, Greetings & Impossible requests gracefully
         if config.get("status") in ["clarify", "impossible"]:
             return {"type": "chat", "message": config.get("message", "I need more details to run this analysis.")}
             
-        # 3. Loop through and execute every chart the AI requested
         executed_charts = []
         for chart in config.get("charts", []):
             sql = chart.get("sql")
@@ -146,7 +141,6 @@ def analyze_data(req: QueryRequest):
         if not executed_charts:
             return {"type": "chat", "message": "The queries executed correctly, but returned no matching data."}
             
-        # 4. Generate the overarching AI narrative
         insight = generate_business_insight(req.query, executed_charts)
         
         context_payload = {

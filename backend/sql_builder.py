@@ -8,10 +8,6 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-2.5-flash')
 
 def generate_snowflake_sql(user_query, raw_metadata, golden_artifact):
-    """
-    Translates natural language into dynamic chart configurations using Agentic Reasoning.
-    """
-    # Safely extract JSON strings before injecting into the f-string to prevent syntax errors
     raw_schema_str = json.dumps(raw_metadata, default=str)
     blueprint_str = json.dumps(golden_artifact, default=str)
 
@@ -65,7 +61,6 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact):
         generation_config={"response_mime_type": "application/json"}
     )
     
-    # --- THE ULTIMATE JSON EXTRACTOR ---
     try:
         raw_text = response.text.strip()
     except Exception as e:
@@ -79,17 +74,12 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact):
         try:
             return json.loads(clean_json)
         except Exception as e:
-            # If it's malformed JSON, show us what Gemini actually wrote
             raise Exception(f"Malformed JSON from AI. Raw output: \n{clean_json}")
     else:
-        # If there are no curly braces at all, show the exact string
         raise Exception(f"AI returned no JSON. Raw output: \n'{raw_text}'")
 
 
 def execute_live_sql(conn, sql_query, database, schema):
-    """
-    Safely locks onto the warehouse and metadata context before executing the query.
-    """
     cursor = conn.cursor()
     try:
         cursor.execute('USE ROLE "PUBLIC"')

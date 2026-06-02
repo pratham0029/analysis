@@ -8,9 +8,6 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-2.5-flash')
 
 def generate_semantic_artifact(enriched_metadata):
-    """
-    Step 2: Analyzes schemas and sample rows to build the 'Golden Artifact'.
-    """
     prompt = f"""
     You are an expert Database Architect. Look at these tables, their column definitions, and 5 sample rows of data:
     {json.dumps(enriched_metadata, default=str)}
