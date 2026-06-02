@@ -1,0 +1,319 @@
+<div class="flex-1 bg-slate-50 px-8 pt-12 pb-8 flex flex-col justify-start items-center relative overflow-y-auto custom-scroll">
+        <div id="empty-state" class="text-center mt-32">
+            <div class="w-12 h-12 border border-slate-200 rounded-xl flex items-center justify-center mx-auto mb-3 bg-white shadow-sm">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            </div>
+            <h3 class="text-sm font-medium text-slate-700">Canvas Inactive</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Please sign in and select your tables to begin.</p>
+        </div>
+
+        <div id="canvas-content" class="w-full max-w-4xl flex flex-col gap-6 hidden pb-12">
+            
+            <div id="analysis-results" class="flex flex-col gap-6 hidden">
+                <div class="premium-panel p-6 rounded-2xl relative bg-white">
+                    <div class="absolute top-0 bottom-0 left-0 w-1 bg-brand-600"></div>
+                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">AI Executive Summary</h4>
+                    <p id="insight-text" class="text-base text-slate-700 font-normal leading-relaxed"></p>
+                </div>
+                
+                <div id="dynamic-charts-wrapper" class="flex flex-col gap-6 w-full"></div>
+
+                <div class="premium-panel p-5 rounded-xl bg-slate-50 border border-slate-200">
+                    <div class="flex items-center gap-2 mb-3">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        <h4 class="text-xs font-semibold text-slate-600 uppercase tracking-wider">Query Details</h4>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-3 pb-3 border-b border-slate-200 items-start">
+                        <div><p class="text-[10px] text-slate-400 uppercase font-medium">Database</p><p id="ctx-db" class="text-xs text-slate-800 font-medium break-words"></p></div>
+                        <div><p class="text-[10px] text-slate-400 uppercase font-medium">Schema</p><p id="ctx-schema" class="text-xs text-slate-800 font-medium break-words"></p></div>
+                        <div><p class="text-[10px] text-slate-400 uppercase font-medium">Target Tables</p><p id="ctx-tables" class="text-xs text-slate-800 font-medium break-words"></p></div>
+                    </div>
+                    <div id="ctx-sql-wrapper" class="space-y-4">
+                        </div>
+                </div>
+            </div>
+
+            <div id="semantic-context-panel" class="premium-panel p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hidden">
+                <div class="flex items-center gap-3 mb-4 border-b border-slate-100 pb-4">
+                    <div class="p-2 bg-blue-50 rounded-lg">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-800 tracking-tight">Semantic Blueprint Generated</h4>
+                        <p class="text-[10px] text-slate-400 uppercase tracking-widest font-medium">AI Table Analysis Complete</p>
+                    </div>
+                </div>
+                <p id="semantic-description" class="text-sm text-slate-600 mb-5 leading-relaxed"></p>
+                <div>
+                    <p class="text-[10px] text-slate-400 uppercase font-bold mb-2 tracking-wider">Golden Artifact JSON Map</p>
+                    <div class="bg-[#0f172a] rounded-xl p-4 overflow-x-auto custom-scroll border border-slate-800 shadow-inner">
+                        <pre><code id="semantic-json" class="font-code text-xs text-blue-300 whitespace-pre"></code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('connect-btn').addEventListener('click', initSSO);
+        document.getElementById('db-select').addEventListener('change', loadSchemas);
+        document.getElementById('profile-btn').addEventListener('click', runMappingProfile);
+        document.getElementById('send-btn').addEventListener('click', runAnalysis);
+        document.getElementById('user-input').addEventListener('keypress', e => { if (e.key === 'Enter') runAnalysis(); });
+        document.getElementById('reset-btn').addEventListener('click', disconnectSession);
+
+        let authCache = {};
+
+        function populateSemanticPanel(artifact) {
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('canvas-content').classList.remove('hidden');
+            document.getElementById('semantic-context-panel').classList.remove('hidden');
+            document.getElementById('semantic-description').innerText = artifact.description || "No description generated.";
+            const artifactClone = { ...artifact };
+            delete artifactClone.description;
+            document.getElementById('semantic-json').innerText = JSON.stringify(artifactClone, null, 2);
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const savedSession = localStorage.getItem('nexus_session');
+            if (savedSession) {
+                authCache = JSON.parse(savedSession);
+                try {
+                    const res = await fetch('/api/restore-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: authCache.user }) });
+                    if (res.ok) {
+                        const data = await res.json();
+                        document.getElementById('step-1-container').classList.add('hidden');
+                        document.getElementById('chat-panel').classList.remove('hidden');
+                        document.getElementById('reset-btn').classList.remove('hidden');
+                        populateSemanticPanel(data.context.metadata);
+                        appendMessage("Session restored successfully. Blueprint loaded.", "system");
+                    } else { localStorage.removeItem('nexus_session'); }
+                } catch(e) { localStorage.removeItem('nexus_session'); }
+            }
+        });
+
+        async function disconnectSession() {
+            if (authCache.user) { await fetch('/api/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: authCache.user }) }); }
+            localStorage.removeItem('nexus_session');
+            location.reload();
+        }
+
+        function attachCssSearchFilter(inputId, itemClass) {
+            const styleId = inputId + '-style';
+            let styleEl = document.getElementById(styleId);
+            if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = styleId; document.head.appendChild(styleEl); }
+            document.getElementById(inputId).addEventListener('input', function(e) {
+                requestAnimationFrame(() => {
+                    const term = e.target.value.trim().replace(/["\\\\]/g, ''); 
+                    if (!term) { styleEl.innerHTML = ''; } 
+                    else { styleEl.innerHTML = `.${itemClass} { display: none !important; } .${itemClass}[data-name*="${term}" i] { display: flex !important; }`; }
+                });
+            });
+        }
+        attachCssSearchFilter('schema-search', 'schema-item');
+        attachCssSearchFilter('table-search', 'table-item');
+
+        async function initSSO() {
+            const btn = document.getElementById('connect-btn');
+            const err = document.getElementById('error-log');
+            authCache = { user: document.getElementById('sf-user').value.trim() };
+            if (!authCache.user) { err.innerText = "Please input a valid identity login route."; err.classList.remove('hidden'); return; }
+            btn.disabled = true; btn.innerText = "Waiting for Okta Authentication..."; btn.classList.add('opacity-75'); err.classList.add('hidden');
+            try {
+                const response = await fetch('/api/connect-init', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(authCache) });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || "Handshake rejected.");
+                document.getElementById('step-1-container').classList.add('hidden');
+                document.getElementById('reset-btn').classList.remove('hidden');
+                document.getElementById('cascade-panel').classList.remove('hidden');
+                const dbSelect = document.getElementById('db-select');
+                const optionsHTML = data.databases.map(db => `<option value="${db}">${db}</option>`).join('');
+                dbSelect.innerHTML = '<option value="" disabled selected>Select database...</option>' + optionsHTML;
+            } catch (e) {
+                err.innerText = e.message; err.classList.remove('hidden');
+                btn.disabled = false; btn.innerText = "Sign in via SSO"; btn.classList.remove('opacity-75');
+            }
+        }
+
+        async function loadSchemas(e) {
+            authCache.database = e.target.value;
+            document.getElementById('schema-block').classList.add('hidden');
+            document.getElementById('table-block').classList.add('hidden');
+            try {
+                const response = await fetch('/api/get-schemas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(authCache) });
+                const data = await response.json();
+                const box = document.getElementById('schema-list-box');
+                box.innerHTML = data.schemas.map(sc => `<label class="schema-item flex items-center gap-2 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-xs transition-all" data-name="${sc}"><input type="radio" name="schema_choice" value="${sc}" class="accent-brand-600 cursor-pointer"><span class="text-slate-700 font-medium truncate">${sc}</span></label>`).join('');
+                document.querySelectorAll('input[name="schema_choice"]').forEach(radio => { radio.addEventListener('change', loadTables); });
+                document.getElementById('schema-search').value = ''; document.getElementById('schema-search-style').innerHTML = '';
+                document.getElementById('schema-block').classList.remove('hidden');
+            } catch(e) { console.error(e); }
+        }
+
+        async function loadTables(e) {
+            authCache.schema_name = e.target.value;
+            document.getElementById('table-block').classList.add('hidden');
+            try {
+                const response = await fetch('/api/get-tables', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(authCache) });
+                const data = await response.json();
+                const box = document.getElementById('table-list-box');
+                box.innerHTML = data.tables.map(t => `<div class="table-item overflow-x-auto custom-scroll flex items-center p-2 rounded-lg hover:bg-slate-100 border border-transparent hover:border-slate-200/60 transition-all" data-name="${t.name}"><div class="flex items-center gap-3 w-max min-w-full"><input type="checkbox" value="${t.name}" class="table-chk accent-brand-600 rounded cursor-pointer flex-shrink-0"><span class="text-slate-700 font-medium text-xs whitespace-nowrap">${t.name}</span><span class="text-[9px] text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded ml-auto uppercase font-semibold bg-white flex-shrink-0">${t.type}</span></div></div>`).join('');
+                document.getElementById('table-search').value = ''; document.getElementById('table-search-style').innerHTML = '';
+                document.getElementById('table-block').classList.remove('hidden');
+            } catch(e) { console.error(e); }
+        }
+
+        async function runMappingProfile() {
+            const checked = document.querySelectorAll('.table-chk:checked');
+            const tableList = Array.from(checked).map(c => c.value);
+            if(tableList.length === 0) return;
+            const btn = document.getElementById('profile-btn');
+            btn.innerText = "Analyzing schemas..."; btn.disabled = true;
+            try {
+                const response = await fetch('/api/profile-selection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...authCache, tables: tableList }) });
+                const data = await response.json();
+                if(response.ok) {
+                    localStorage.setItem('nexus_session', JSON.stringify(authCache));
+                    document.getElementById('cascade-panel').classList.add('hidden');
+                    document.getElementById('chat-panel').classList.remove('hidden');
+                    populateSemanticPanel(data.artifact);
+                    appendMessage("Tables successfully loaded and analyzed! You can now ask questions.", "system");
+                }
+            } catch(e) { console.error(e); btn.innerText = "Load Selected Tables"; btn.disabled = false; }
+        }
+
+        async function runAnalysis() {
+            const input = document.getElementById('user-input');
+            const query = input.value.trim(); if(!query) return;
+            input.value = ''; appendMessage(query, 'user');
+
+            const history = document.getElementById('chat-history');
+            const loadingId = 'loading-' + Date.now();
+            const loadingBubble = document.createElement('div');
+            loadingBubble.id = loadingId;
+            loadingBubble.className = `p-3.5 rounded-xl max-w-[85%] w-fit chat-system animate-pulse text-slate-400 italic text-xs`;
+            loadingBubble.innerText = "Analyzing data framework...";
+            history.appendChild(loadingBubble); history.scrollTop = history.scrollHeight;
+
+            try {
+                const response = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: authCache.user, query: query }) });
+                const result = await response.json();
+                document.getElementById(loadingId)?.remove();
+
+                if (result.type === 'chat') {
+                    appendMessage(result.message, 'system'); return;
+                }
+                
+                appendMessage("Analysis complete. Visual rendering loaded.", 'system');
+                document.getElementById('analysis-results').classList.remove('hidden');
+                
+                if(result.context) {
+                    document.getElementById('ctx-db').innerText = result.context.database;
+                    document.getElementById('ctx-schema').innerText = result.context.schema;
+                    document.getElementById('ctx-tables').innerText = result.context.tables.join(', ');
+                }
+                document.getElementById('insight-text').innerText = result.insight;
+                
+                // DYNAMICALLY GENERATE CHARTS AND SQL PANELS
+                const chartWrapper = document.getElementById('dynamic-charts-wrapper');
+                const sqlWrapper = document.getElementById('ctx-sql-wrapper');
+                
+                chartWrapper.innerHTML = '';
+                sqlWrapper.innerHTML = '';
+
+                result.charts.forEach((chartData, idx) => {
+                    // Create visual chart container
+                    const chartId = `chart-instance-${Date.now()}-${idx}`;
+                    const chartDiv = document.createElement('div');
+                    chartDiv.className = "premium-panel p-6 rounded-2xl h-[450px] bg-white";
+                    chartDiv.innerHTML = `<div id="${chartId}" class="w-full h-full"></div>`;
+                    chartWrapper.appendChild(chartDiv);
+
+                    // Render ECharts
+                    const chartInstance = echarts.init(document.getElementById(chartId));
+                    renderGraph(chartInstance, chartData.data, chartData.chart_title, chartData.chart_type);
+
+                    // Add SQL query to the bottom panel
+                    const sqlDiv = document.createElement('div');
+                    sqlDiv.innerHTML = `
+                        <p class="text-[10px] text-slate-400 uppercase font-medium mb-1">${chartData.chart_title} - Generated SQL</p>
+                        <div class="bg-slate-800 rounded-lg p-3 overflow-x-auto custom-scroll border-l-2 border-brand-500">
+                            <code class="font-code text-xs text-green-400 whitespace-pre">${chartData.sql}</code>
+                        </div>
+                    `;
+                    sqlWrapper.appendChild(sqlDiv);
+                });
+
+            } catch(e) { console.error(e); document.getElementById(loadingId)?.remove(); }
+        }
+
+        // Updated to accept the specific chart instance
+        function renderGraph(instance, data, title, type) {
+            instance.resize();
+            instance.setOption({
+                backgroundColor: 'transparent',
+                title: {
+                    text: title,
+                    left: 'center',
+                    textStyle: { color: '#1e293b', fontFamily: 'Inter', fontSize: 14, fontWeight: '600' }
+                },
+                tooltip: { 
+                    trigger: 'axis', 
+                    backgroundColor: '#ffffff', 
+                    borderColor: '#e2e8f0', 
+                    textStyle: { color: '#0f172a', fontFamily: 'Inter' },
+                    formatter: function (params) {
+                        let val = params[0].value;
+                        if (val >= 1e6) val = (val / 1e6).toFixed(2) + 'M';
+                        else if (val >= 1e3) val = (val / 1e3).toFixed(2) + 'K';
+                        return `<b>${params[0].name}</b><br/>Metric: ${val}`;
+                    }
+                },
+                grid: { top: '15%', right: '4%', bottom: '15%', left: '8%', containLabel: true },
+                xAxis: { 
+                    type: 'category', 
+                    data: data.map(i => i.dimension), 
+                    axisLine: { lineStyle: { color: '#cbd5e1' } }, 
+                    axisLabel: { color: '#64748b', fontFamily: 'Inter', rotate: 25, interval: 'auto' } 
+                },
+                yAxis: { 
+                    type: 'value', 
+                    splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }, 
+                    axisLine: { show: false },
+                    axisLabel: { 
+                        color: '#64748b', 
+                        fontFamily: 'Inter',
+                        formatter: function (value) {
+                            if (value >= 1e6) return (value / 1e6).toFixed(0) + 'M';
+                            if (value >= 1e3) return (value / 1e3).toFixed(0) + 'K';
+                            return value;
+                        }
+                    } 
+                },
+                series: [{ 
+                    data: data.map(i => i.metric), 
+                    type: type, 
+                    smooth: type === 'line',
+                    barWidth: type === 'bar' ? '30%' : undefined,
+                    showSymbol: type === 'line',
+                    symbolSize: 6,
+                    itemStyle: { 
+                        color: type === 'bar' 
+                            ? new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#f43f5e' }, { offset: 1, color: '#be123c' }])
+                            : '#e11d48'
+                    },
+                    lineStyle: type === 'line' ? { width: 3, shadowColor: 'rgba(225, 29, 72, 0.2)', shadowBlur: 8, shadowOffsetY: 3 } : undefined
+                }]
+            });
+        }
+
+        function appendMessage(text, sender) {
+            const history = document.getElementById('chat-history');
+            const bubble = document.createElement('div');
+            bubble.className = `p-3.5 rounded-xl max-w-[85%] w-fit ${sender === 'user' ? 'chat-user ml-auto' : 'chat-system'}`;
+            bubble.innerText = text; history.appendChild(bubble);
+            history.scrollTop = history.scrollHeight;
+        }
+    </script>
+</body>
+</html>
