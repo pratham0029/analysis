@@ -91,7 +91,6 @@
         font-family: "JetBrains Mono", monospace;
       }
 
-      /* Sleeker custom scrollbar */
       .custom-scroll::-webkit-scrollbar {
         height: 5px;
         width: 5px;
@@ -108,7 +107,6 @@
         background: #94a3b8;
       }
 
-      /* Typing Indicator Animation */
       .dot-flashing {
         width: 6px;
         height: 6px;
@@ -156,6 +154,7 @@
           </div>
         </div>
         <button
+          type="button"
           id="reset-btn"
           class="hidden text-slate-400 hover:text-brand-600 hover:bg-brand-50 p-1.5 rounded-lg transition-all mt-0.5"
           title="Disconnect Session"
@@ -187,6 +186,7 @@
             class="w-full input-premium rounded-xl p-3.5 text-sm text-slate-800 font-medium"
           />
           <button
+            type="button"
             id="connect-btn"
             class="w-full bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-medium py-3 rounded-xl text-sm transition-all shadow-md hover:shadow-lg"
           >
@@ -217,6 +217,7 @@
               type="text"
               id="schema-search"
               placeholder="Search schemas..."
+              autocomplete="off"
               class="w-full input-premium rounded-t-lg p-2.5 text-xs border-b-0"
             />
             <div
@@ -232,6 +233,7 @@
               type="text"
               id="table-search"
               placeholder="Search tables..."
+              autocomplete="off"
               class="w-full input-premium rounded-t-lg p-2.5 text-xs border-b-0"
             />
             <div
@@ -239,6 +241,7 @@
               class="max-h-[160px] overflow-y-auto border border-slate-200 rounded-b-lg p-2 bg-slate-50/50 space-y-0.5 custom-scroll"
             ></div>
             <button
+              type="button"
               id="profile-btn"
               class="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white font-medium py-3 rounded-xl text-sm transition-all shadow-md mt-4"
             >
@@ -263,10 +266,12 @@
             <input
               type="text"
               id="user-input"
+              autocomplete="off"
               class="w-full input-premium text-slate-800 rounded-xl py-3.5 pl-4 pr-12 text-sm"
               placeholder="Ask a question about your data..."
             />
             <button
+              type="button"
               id="send-btn"
               class="absolute right-1.5 top-1.5 bottom-1.5 bg-brand-600 hover:bg-brand-700 active:scale-90 text-white px-3.5 rounded-lg flex items-center justify-center transition-all shadow-sm"
             >
@@ -512,13 +517,16 @@
         const savedSession = localStorage.getItem("nexus_session");
         if (savedSession) {
           authCache = JSON.parse(savedSession);
+          // Just pre-fill the email for convenience, but DO NOT auto-click anything
           document.getElementById("sf-user").value = authCache.user;
+
           try {
             const res = await fetch("/api/restore-session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ user: authCache.user }),
             });
+
             if (res.ok) {
               const data = await res.json();
               document
@@ -532,10 +540,13 @@
                 "system",
               );
             } else {
-              initSSO();
+              // FIX: If the server restarted and the session is dead, clear the cache.
+              // Do NOT call initSSO() here. Just wait for the user to click.
+              localStorage.removeItem("nexus_session");
             }
           } catch (e) {
-            initSSO();
+            // FIX: If the backend is unreachable, do nothing. Wait for the user.
+            localStorage.removeItem("nexus_session");
           }
         }
       });
@@ -551,6 +562,10 @@
         const savedUser = authCache.user;
         authCache = { user: savedUser };
         localStorage.setItem("nexus_session", JSON.stringify(authCache));
+
+        // Ensure input fields are completely cleared out
+        document.getElementById("schema-search").value = "";
+        document.getElementById("table-search").value = "";
 
         document.getElementById("chat-panel").classList.add("hidden");
         document.getElementById("cascade-panel").classList.remove("hidden");
@@ -626,6 +641,7 @@
           dbSelect.innerHTML =
             '<option value="" disabled selected>Select database...</option>' +
             optionsHTML;
+          dbSelect.selectedIndex = 0; // Force browser to clear cached dropdown ghosting
         } catch (e) {
           err.innerText = e.message;
           err.classList.remove("hidden");
@@ -733,7 +749,6 @@
         const loadingId = "loading-" + Date.now();
         const loadingBubble = document.createElement("div");
         loadingBubble.id = loadingId;
-        // The new iMessage style typing indicator
         loadingBubble.className = `p-3.5 rounded-2xl rounded-tl-sm w-fit bg-white border border-slate-200 shadow-sm flex items-center gap-1.5 h-10 px-4`;
         loadingBubble.innerHTML = `<div class="dot-flashing"></div><div class="dot-flashing"></div><div class="dot-flashing"></div>`;
         history.appendChild(loadingBubble);
@@ -917,7 +932,6 @@
         const history = document.getElementById("chat-history");
         const bubble = document.createElement("div");
 
-        // Differentiate user and system styles smoothly
         if (sender === "user") {
           bubble.className = `p-3.5 px-4 rounded-2xl rounded-tr-sm w-fit max-w-[85%] bg-brand-600 text-white shadow-sm ml-auto font-medium text-[13px] leading-relaxed animate-fade-in-up`;
         } else {
