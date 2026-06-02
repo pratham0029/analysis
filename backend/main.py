@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from backend.snowflake_db import get_snowflake_connection, fetch_databases, fetch_schemas, fetch_tables, extract_table_metadata
-from backend.ai_engine import parse_user_intent, generate_business_insight, generate_semantic_artifact
+from backend.ai_engine import  generate_business_insight, generate_semantic_artifact
 from backend.sql_builder import generate_snowflake_sql, execute_live_sql
 
 app = FastAPI()
@@ -121,26 +121,21 @@ def analyze_data(req: QueryRequest):
     database = active_context.get("database", "UNKNOWN")
     schema = active_context.get("schema", "UNKNOWN")
     
-    # 1. Handle casual conversation first
-    parsed_intent = parse_user_intent(req.query, schema_map)
-    if parsed_intent.get("intent_type") == "chat":
-        return {"type": "chat", "message": parsed_intent.get("message")}
-    
     try:
-        # 2. Fetch the advanced Multi-Chart Plan
+        # 1. Fetch the advanced Multi-Chart Plan directly (The old gatekeeper is gone!)
         config = generate_snowflake_sql(req.query, raw_metadata, schema_map)
         
-        # 3. Handle Clarifications & Impossible requests
+        # 2. Handle Clarifications, Greetings & Impossible requests gracefully
         if config.get("status") in ["clarify", "impossible"]:
             return {"type": "chat", "message": config.get("message", "I need more details to run this analysis.")}
             
-        # 4. Loop through and execute every chart the AI requested
+        # 3. Loop through and execute every chart the AI requested
         executed_charts = []
         for chart in config.get("charts", []):
             sql = chart.get("sql")
             chart_data = execute_live_sql(conn, sql, database, schema)
             
-            if chart_data: # Only attach it if data was found
+            if chart_data:
                 executed_charts.append({
                     "chart_title": chart.get("chart_title", "Analysis"),
                     "chart_type": chart.get("chart_type", "bar"),
@@ -151,7 +146,7 @@ def analyze_data(req: QueryRequest):
         if not executed_charts:
             return {"type": "chat", "message": "The queries executed correctly, but returned no matching data."}
             
-        # 5. Generate a massive overarching summary of ALL charts combined
+        # 4. Generate the overarching AI narrative
         insight = generate_business_insight(req.query, executed_charts)
         
         context_payload = {
@@ -163,7 +158,7 @@ def analyze_data(req: QueryRequest):
         return {
             "type": "query", 
             "insight": insight,
-            "charts": executed_charts, # Returns an Array of charts now!
+            "charts": executed_charts, 
             "context": context_payload
         }
         
@@ -172,7 +167,6 @@ def analyze_data(req: QueryRequest):
             "type": "chat",
             "message": f"Analytical calculation failed.\n\nDetails: {str(e)}"
         }
-
 @app.get("/", response_class=HTMLResponse)
 def get_workspace_ui():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

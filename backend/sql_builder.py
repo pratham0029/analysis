@@ -29,9 +29,8 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact):
 
     AGENTIC REASONING RULES:
     1. CHAIN OF THOUGHT: You MUST write out your step-by-step reasoning in the "thought_process" field first. Analyze what the user is asking, identify the exact tables and columns needed, and explicitly state how you will group and sort the data.
-    2. AMBIGUITY & CLARIFICATION: If the user's request is vague, DO NOT GUESS. Set "status" to "clarify" and formulate a specific, conversational question in the "message" field asking the user to clarify.
-    3. IMPOSSIBLE REQUESTS: If the request asks for data that objectively does not exist in the schema, set "status" to "impossible" and politely explain what data is actually available.
-    4. DYNAMIC MULTI-CHARTING: If the user's request requires looking at the data from multiple angles (e.g. daily vs weekly), independently decide how many separate charts to build. Generate a distinct SQL query and chart configuration for each angle.
+    2. AMBIGUITY, GREETINGS & CLARIFICATION: If the user says "hello", or if the request is vague, DO NOT GUESS. Set "status" to "clarify" and formulate a friendly, conversational response in the "message" field asking the user to clarify what they want to see.
+    3. IMPOSSIBLE REQUESTS: If the request asks for data that objectively does not exist in the schema, set "status" to "impossible" and politely explain what data is actually available.    4. DYNAMIC MULTI-CHARTING: If the user's request requires looking at the data from multiple angles (e.g. daily vs weekly), independently decide how many separate charts to build. Generate a distinct SQL query and chart configuration for each angle.
     5. TRANSACTIONAL DATA TRAP (CRITICAL): These tables contain transactional data. You MUST aggregate (GROUP BY) the data FIRST, before applying any LIMITs.
     6. TIME-SERIES SQL STRUCTURE: To get the most recent trend data while avoiding future zero-placeholder rows and avoiding the transactional trap, use this EXACT SQL pattern:
        SELECT dim, metric FROM (
