@@ -6,10 +6,15 @@ An intelligent data analysis workspace that connects to Snowflake databases and 
 
 - **Snowflake Integration**: Secure SSO authentication with Snowflake data warehouses
 - **Natural Language to SQL**: Uses Google Gemini AI to translate natural language queries into optimized SQL
-- **Dynamic Visualization**: Automatically generates interactive charts (line, bar) using ECharts
+- **Dynamic Visualization**: Automatically generates interactive charts (7 types: line, bar, scatter, histogram, boxplot, stacked_bar_100, choropleth) using ECharts
 - **Semantic Understanding**: AI analyzes table schemas and sample data to understand business context
 - **Multi-Chart Analysis**: Can generate multiple visualizations from a single query
 - **Business Insights**: AI-generated executive summaries of analysis results
+- **SQL Safety Guardrails**: Regex-based validation to prevent destructive operations
+- **Self-Healing SQL**: AI-powered automatic SQL error correction and retry logic
+- **Chat History Context**: Maintains conversation context for follow-up questions
+- **Flexible Text Matching**: ILIKE-based fuzzy matching for product/brand names
+- **Future Data Trap Prevention**: Smart relative date handling to avoid zero-padded future rows
 
 ## Tech Stack
 
@@ -144,6 +149,274 @@ ai-data-analyst/
    - AI generates optimized SQL queries with proper aggregation
    - Multiple charts can be generated for different analytical angles
 5. **Visualization**: Results are rendered as interactive charts with SQL transparency
+
+## Technical Architecture & User Journey
+
+### Methodology Overview
+
+This system implements a **Schema-Augmented Generation (SAG)** pattern, similar to Retrieval-Augmented Generation (RAG), but instead of retrieving document chunks, it retrieves and analyzes database schema metadata. The AI uses this semantic understanding to generate context-aware SQL queries and visualizations.
+
+### Complete Technical Flow
+
+#### Phase 1: Connection & Authentication
+
+**User Action**: Enters corporate SSO email and clicks "Sign in via SSO"
+
+**Backend Flow**:
+1. `POST /api/connect-init` → `connect_init()` in `main.py`
+2. Calls `get_snowflake_connection(account, user)` in `snowflake_db.py`
+   - Cleans account identifier (removes .snowflakecomputing.com, https://)
+   - Establishes Snowflake connection using `authenticator='externalbrowser'` (SSO)
+   - Sets explicit warehouse: `VIZ_UTIL_SMALL_WH`
+   - Sets explicit role: `PUBLIC`
+   - Stores connection in `ACTIVE_CONNECTIONS` dictionary (reuses if exists)
+3. Calls `fetch_databases(conn)` in `snowflake_db.py`
+   - Executes `SHOW DATABASES` in Snowflake
+   - Returns list of database names
+4. Returns database list to frontend
+
+#### Phase 2: Schema Exploration
+
+**User Action**: Selects database, then schema, then tables/views
+
+**Backend Flow**:
+1. `POST /api/get-schemas` → `get_schemas()` in `main.py`
+   - Retrieves connection from `ACTIVE_CONNECTIONS`
+   - Calls `fetch_schemas(conn, database)` in `snowflake_db.py`
+   - Executes `SHOW SCHEMAS IN DATABASE "{database}"`
+   - Returns schema list
+
+2. `POST /api/get-tables` → `get_tables()` in `main.py`
+   - Calls `fetch_tables(conn, database, schema)` in `snowflake_db.py`
+   - Executes `SHOW TABLES IN SCHEMA "{database}"."{schema}"`
+   - Executes `SHOW VIEWS IN SCHEMA "{database}"."{schema}"`
+   - Returns combined list of tables and views with types
+
+#### Phase 3: Semantic Understanding (The "Golden Artifact")
+
+**User Action**: Selects tables/views and clicks "Load Selected Tables"
+
+**Backend Flow**:
+1. `POST /api/profile-selection` → `profile_selection()` in `main.py`
+2. Calls `extract_table_metadata(conn, database, schema, tables)` in `snowflake_db.py`
+   - For each selected table:
+     - Executes `DESCRIBE TABLE "{database}"."{schema}"."{table}"`
+     - Extracts column names and data types
+     - Executes `SELECT * FROM ... LIMIT 5` to get sample rows
+     - Stores column definitions + sample data in metadata dictionary
+   - Returns enriched metadata with schema + sample_data for each table
+
+3. Calls `generate_semantic_artifact(raw_enriched_metadata)` in `ai_engine.py`
+   - Sends enriched metadata to Google Gemini 2.5 Flash
+   - AI analyzes and identifies:
+     - Primary keys (columns likely to be unique identifiers)
+     - Foreign key relationships (columns that link tables together)
+     - Metrics (numeric/financial columns: revenue, cost, quantity)
+     - Dimensions (categorical/date columns: region, status, dates)
+     - Business context description (professional paragraph explaining data purpose)
+   - Returns "golden artifact" JSON with:
+     ```json
+     {
+       "description": "Business context explanation...",
+       "relationships": [{"table_1": "...", "col_1": "...", "table_2": "...", "col_2": "..."}],
+       "metrics": ["TOTAL_REVENUE", "QUANTITY_SOLD"],
+       "dimensions": ["REGION", "ORDER_DATE"]
+     }
+     ```
+
+4. Stores in `USER_SCHEMAS[user]`:
+   - database, schema, tables
+   - raw_metadata (column definitions + sample data)
+   - metadata (golden artifact - semantic understanding)
+
+#### Phase 4: Query Analysis & Execution (The Core AI Pipeline)
+
+**User Action**: Types natural language question (e.g., "Show me revenue trends by region")
+
+**Backend Flow**:
+1. `POST /api/analyze` → `analyze_data()` in `main.py`
+   - Retrieves connection from `ACTIVE_CONNECTIONS`
+   - Retrieves context from `USER_SCHEMAS` (golden artifact + raw metadata)
+
+2. Calls `generate_snowflake_sql(user_query, raw_metadata, schema_map, history)` in `sql_builder.py`
+   - Constructs prompt with:
+     - Chat history (for context from previous questions)
+     - Current user question
+     - Raw schema (column definitions + sample data)
+     - Semantic blueprint (golden artifact with relationships, metrics, dimensions)
+   - Sends to Google Gemini 2.5 Flash with strict JSON output requirement
+   - AI performs agentic reasoning:
+     - Analyzes user intent (greeting, clarification needed, or data query)
+     - Identifies required metrics and dimensions
+     - Determines optimal chart types (line, bar, scatter, histogram, boxplot, stacked_bar_100, choropleth)
+     - Generates SQL queries with proper aggregation (GROUP BY before LIMIT)
+     - Handles relative dates (anchors to MAX date where metric > 0 to avoid future zero rows)
+     - Uses ILIKE for flexible text matching (product/brand names)
+   - Returns JSON configuration:
+     ```json
+     {
+       "thought_process": "Step-by-step analytical rationale...",
+       "status": "success",
+       "message": "Any clarifications or adaptations...",
+       "charts": [
+         {
+           "chart_title": "Revenue Trends by Region",
+           "chart_type": "line",
+           "target_map": "Brazil",  // for choropleth
+           "sql": "SELECT region AS dim, SUM(revenue) AS metric FROM table GROUP BY region"
+         }
+       ]
+     }
+     ```
+
+3. For each chart in configuration:
+   - Calls `is_safe_sql(sql_query)` in `sql_builder.py`
+     - Regex validation: blocks DROP, DELETE, UPDATE, INSERT, ALTER, GRANT, REVOKE, TRUNCATE, CREATE, REPLACE
+     - Returns False if destructive keywords detected
+   
+   - If safe, calls `execute_live_sql(conn, sql, database, schema)` in `sql_builder.py`
+     - Sets context: `USE ROLE "PUBLIC"`, `USE WAREHOUSE "VIZ_UTIL_SMALL_WH"`, `USE DATABASE`, `USE SCHEMA`
+     - Executes SQL query
+     - Processes results:
+       - Handles NULL values
+       - Converts to float for metrics
+       - Handles infinity/NaN (converts to 0)
+       - Handles non-numeric types (converts to string for labels)
+     - Returns data array: `[{"dim": "Region A", "metric": 1000}, ...]`
+
+   - If SQL execution fails:
+     - Calls `fix_snowflake_sql(bad_sql, error_msg, golden_artifact)` in `sql_builder.py`
+       - Sends failed SQL + error message + schema map to AI
+       - AI analyzes error and generates corrected SQL
+       - Returns JSON: `{"sql": "SELECT ..."}`
+     - Retries execution with fixed SQL
+     - If still fails, adds error chart to results
+
+4. Calls `generate_business_insight(user_query, executed_charts)` in `ai_engine.py`
+   - Sends user question + chart data to AI
+   - AI generates comprehensive executive summary (4-6 sentences)
+   - Highlights trends, identifies anomalies, explains comparisons
+   - Returns natural language insight
+
+5. Returns to frontend:
+   ```json
+   {
+     "type": "query",
+     "insight": "Executive summary...",
+     "charts": [...],
+     "context": {"database": "...", "schema": "...", "tables": [...]},
+     "message": "Any AI messages..."
+   }
+   ```
+
+#### Phase 5: Visualization Rendering
+
+**Frontend Flow**:
+1. Receives chart data and SQL queries
+2. For each chart:
+   - Creates ECharts instance
+   - Configures chart based on type (line, bar, scatter, etc.)
+   - Renders with proper tooltips, axes, styling
+   - Displays SQL query in expandable panel
+3. Displays AI executive summary
+4. Shows query context (database, schema, tables)
+
+### Function Execution Order & Details
+
+#### Connection Phase Functions
+
+1. **`get_snowflake_connection(account, user)`** (snowflake_db.py)
+   - **Purpose**: Establish secure SSO connection to Snowflake
+   - **How it works**: 
+     - Cleans account identifier string
+     - Uses external browser authenticator (Okta/Azure AD)
+     - Sets explicit warehouse and role for security
+   - **Returns**: Active Snowflake connection object
+
+2. **`fetch_databases(conn)`** (snowflake_db.py)
+   - **Purpose**: List available databases
+   - **How it works**: Executes `SHOW DATABASES` SQL command
+   - **Returns**: List of database names
+
+3. **`fetch_schemas(conn, database)`** (snowflake_db.py)
+   - **Purpose**: List schemas in a database
+   - **How it works**: Executes `SHOW SCHEMAS IN DATABASE` SQL command
+   - **Returns**: List of schema names
+
+4. **`fetch_tables(conn, database, schema)`** (snowflake_db.py)
+   - **Purpose**: List tables and views in a schema
+   - **How it works**: 
+     - Executes `SHOW TABLES` and `SHOW VIEWS` commands
+     - Combines results with type indicators
+   - **Returns**: List of objects with name and type (TABLE/VIEW)
+
+#### Semantic Understanding Functions
+
+5. **`extract_table_metadata(conn, database, schema, tables)`** (snowflake_db.py)
+   - **Purpose**: Extract column definitions and sample data
+   - **How it works**:
+     - For each table: runs `DESCRIBE TABLE` to get schema
+     - Runs `SELECT * LIMIT 5` to get sample rows
+     - Handles secured views that restrict SELECT *
+   - **Returns**: Dictionary with column definitions and sample data per table
+
+6. **`generate_semantic_artifact(enriched_metadata)`** (ai_engine.py)
+   - **Purpose**: AI-powered business context analysis
+   - **How it works**:
+     - Sends schema + sample data to Gemini 2.5 Flash
+     - AI identifies relationships, metrics, dimensions
+     - AI writes business context description
+   - **Returns**: Golden artifact JSON with semantic understanding
+
+#### Query Analysis Functions
+
+7. **`generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history)`** (sql_builder.py)
+   - **Purpose**: Translate natural language to SQL with multi-chart planning
+   - **How it works**:
+     - Constructs comprehensive prompt with schema, semantic blueprint, chat history
+     - AI performs chain-of-thought reasoning
+     - AI determines optimal chart types and SQL structure
+     - AI handles edge cases (relative dates, text matching, aggregation)
+   - **Returns**: JSON with chart configurations and SQL queries
+
+8. **`is_safe_sql(sql_query)`** (sql_builder.py)
+   - **Purpose**: Validate SQL for destructive operations
+   - **How it works**: Regex pattern matching against forbidden keywords
+   - **Returns**: Boolean (True if safe, False if blocked)
+
+9. **`execute_live_sql(conn, sql_query, database, schema)`** (sql_builder.py)
+   - **Purpose**: Execute SQL in Snowflake with data processing
+   - **How it works**:
+     - Sets role, warehouse, database, schema context
+     - Executes SQL query
+     - Processes results (handles NULL, infinity, type conversion)
+     - Formats data for frontend consumption
+   - **Returns**: Array of dimension/metric objects
+
+10. **`fix_snowflake_sql(bad_sql, error_msg, golden_artifact)`** (sql_builder.py)
+    - **Purpose**: AI-powered SQL error correction
+    - **How it works**:
+      - Sends failed SQL + error + schema to AI
+      - AI analyzes error and generates corrected SQL
+      - Handles markdown formatting in AI response
+    - **Returns**: JSON with corrected SQL
+
+11. **`generate_business_insight(user_query, data_results)`** (ai_engine.py)
+    - **Purpose**: Generate executive summary from analysis results
+    - **How it works**:
+      - Sends user question + chart data to AI
+      - AI analyzes trends, anomalies, comparisons
+      - AI writes professional 4-6 sentence summary
+    - **Returns**: Natural language insight text
+
+### Key Design Patterns
+
+- **Schema-Augmented Generation (SAG)**: Like RAG, but retrieves database schema instead of documents
+- **Agentic Reasoning**: AI performs step-by-step analytical thinking before generating SQL
+- **Self-Healing Loop**: Automatic error detection and correction without user intervention
+- **Guardrail Pattern**: Multiple safety layers (regex validation, explicit role/warehouse, connection pooling)
+- **Context Persistence**: Session-based storage of semantic understanding for follow-up questions
+- **Multi-Modal Output**: Combines SQL, charts, and natural language insights
 
 ## Security Notes
 
