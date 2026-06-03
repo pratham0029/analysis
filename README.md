@@ -446,6 +446,3 @@ uv add <package-name>
 
 **SQL Execution Errors**: Ensure the role has SELECT permissions on the selected tables/views.
 
-## License
-
-[Add your license here]
