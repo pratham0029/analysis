@@ -6,7 +6,7 @@
     <title>Colpal AI Analyst</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/map/js/world.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/js/world.js"></script>
     <script>
       tailwind.config = {
         theme: {
@@ -165,8 +165,10 @@
       document.getElementById("reset-btn").addEventListener("click", disconnectSession);
 
       let authCache = {};
-      let chatContext = []; // NEW: Array to track conversation history
+      let chatContext = []; 
       const ECHARTS_COLORS = ["#e11d48", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4"];
+      
+      const loadedGeoMaps = { 'world': true }; 
 
       function populateSemanticPanel(artifact) {
         document.getElementById("empty-state").classList.add("hidden");
@@ -199,14 +201,26 @@
       });
 
       async function disconnectSession() {
-        if (authCache.user) { await fetch("/api/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: authCache.user }) }); }
+        if (authCache.user) { 
+            await fetch("/api/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: authCache.user }) }); 
+        }
+        
         const savedUser = authCache.user;
         authCache = { user: savedUser };
-        chatContext = []; // Clear chat history on disconnect
+        chatContext = []; 
         localStorage.setItem("nexus_session", JSON.stringify(authCache));
 
         document.getElementById("schema-search").value = "";
         document.getElementById("table-search").value = "";
+        
+        document.getElementById("db-select").innerHTML = '<option value="" disabled selected>Select database...</option>';
+        document.getElementById("schema-list-box").innerHTML = "";
+        document.getElementById("table-list-box").innerHTML = "";
+        
+        const profileBtn = document.getElementById("profile-btn");
+        profileBtn.innerHTML = "Load Selected Tables";
+        profileBtn.disabled = false;
+
         document.getElementById("chat-panel").classList.add("hidden");
         document.getElementById("cascade-panel").classList.remove("hidden");
         document.getElementById("schema-block").classList.add("hidden");
@@ -216,6 +230,7 @@
         document.getElementById("analysis-results").classList.add("hidden");
         document.getElementById("empty-state").classList.remove("hidden");
         document.getElementById("chat-history").innerHTML = "";
+        
         initSSO();
       }
 
@@ -392,11 +407,10 @@
         }
       }
 
-      function renderGraph(instance, data, title, type) {
+      async function renderGraph(instance, data, title, type) {
         instance.resize();
         const xAxisInterval = type === "histogram" ? 'auto' : 0;
         
-        // FIX: Rebalanced the grid container spacing parameters (top: 15% / bottom: 25%) to eliminate stacked bar vertical canvas overflow clipping bugs
         let option = {
           backgroundColor: "transparent",
           title: { text: title, left: "center", textStyle: { color: "#0f172a", fontFamily: "Inter", fontSize: 14, fontWeight: "700" } },
@@ -486,20 +500,73 @@
         }
         else if (type === "choropleth") {
           delete option.grid; delete option.xAxis; delete option.yAxis;
-          let maxVal = Math.max(...data.map(i => i.metric));
+          
+          const usMap = { "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming", "PR": "Puerto Rico" };
+          const caMap = { "AB": "Alberta", "BC": "British Columbia", "MB": "Manitoba", "NB": "New Brunswick", "NL": "Newfoundland and Labrador", "NS": "Nova Scotia", "ON": "Ontario", "PE": "Prince Edward Island", "QC": "Quebec", "SK": "Saskatchewan", "NT": "Northwest Territories", "NU": "Nunavut", "YT": "Yukon" };
+          const mxMap = { "AGS": "Aguascalientes", "BCN": "Baja California", "BCS": "Baja California Sur", "CAMP": "Campeche", "CHIS": "Chiapas", "CHIH": "Chihuahua", "COAH": "Coahuila", "COL": "Colima", "CDMX": "Ciudad de México", "DGO": "Durango", "GTO": "Guanajuato", "GRO": "Guerrero", "HGO": "Hidalgo", "JAL": "Jalisco", "MEX": "México", "MICH": "Michoacán", "MOR": "Morelos", "NAY": "Nayarit", "NL": "Nuevo León", "OAX": "Oaxaca", "PUE": "Puebla", "QRO": "Querétaro", "QROO": "Quintana Roo", "SLP": "San Luis Potosí", "SIN": "Sinaloa", "SON": "Sonora", "TAB": "Tabasco", "TAM": "Tamaulipas", "TLAX": "Tlaxcala", "VER": "Veracruz", "YUC": "Yucatán", "ZAC": "Zacatecas" };
+          const inMap = { "AP": "Andhra Pradesh", "AR": "Arunachal Pradesh", "AS": "Assam", "BR": "Bihar", "CT": "Chhattisgarh", "CG": "Chhattisgarh", "GA": "Goa", "GJ": "Gujarat", "HR": "Haryana", "HP": "Himachal Pradesh", "JH": "Jharkhand", "KA": "Karnataka", "KL": "Kerala", "MP": "Madhya Pradesh", "MH": "Maharashtra", "MN": "Manipur", "ML": "Meghalaya", "MZ": "Mizoram", "NL": "Nagaland", "OR": "Odisha", "OD": "Odisha", "PB": "Punjab", "RJ": "Rajasthan", "SK": "Sikkim", "TN": "Tamil Nadu", "TG": "Telangana", "TS": "Telangana", "TR": "Tripura", "UP": "Uttar Pradesh", "UT": "Uttarakhand", "UK": "Uttarakhand", "WB": "West Bengal", "AN": "Andaman and Nicobar Islands", "CH": "Chandigarh", "DN": "Dadra and Nagar Haveli", "DD": "Daman and Diu", "DL": "Delhi", "JK": "Jammu and Kashmir", "LA": "Ladakh", "LD": "Lakshadweep", "PY": "Puducherry" };
+          const globalCodes = { "US": "United States", "USA": "United States", "GB": "United Kingdom", "UK": "United Kingdom", "CA": "Canada", "CAN": "Canada", "MX": "Mexico", "MEX": "Mexico", "IN": "India", "IND": "India", "CN": "China", "CHN": "China", "JP": "Japan", "JPN": "Japan", "DE": "Germany", "FR": "France", "BR": "Brazil", "AU": "Australia" };
+
+          let targetMap = 'world';
+          
+          if (data.some(i => usMap[String(i.dim).toUpperCase()] || Object.values(usMap).includes(i.dim))) { targetMap = 'USA'; }
+          else if (data.some(i => caMap[String(i.dim).toUpperCase()] || Object.values(caMap).includes(i.dim))) { targetMap = 'Canada'; }
+          else if (data.some(i => mxMap[String(i.dim).toUpperCase()] || Object.values(mxMap).includes(i.dim))) { targetMap = 'Mexico'; }
+          else if (data.some(i => inMap[String(i.dim).toUpperCase()] || Object.values(inMap).includes(i.dim))) { targetMap = 'India'; }
+
+          // --- THE FIX: DYNAMIC GEOJSON DOWNLOADING ---
+          if (!loadedGeoMaps[targetMap] && targetMap !== 'world') {
+              instance.showLoading({ text: 'Downloading Map Data...', color: '#e11d48', textColor: '#0f172a', maskColor: 'rgba(255, 255, 255, 0.8)' });
+              try {
+                  let geoUrl = '';
+                  if (targetMap === 'USA') geoUrl = 'https://code.highcharts.com/mapdata/countries/us/us-all.geo.json';
+                  else if (targetMap === 'Canada') geoUrl = 'https://code.highcharts.com/mapdata/countries/ca/ca-all.geo.json';
+                  else if (targetMap === 'Mexico') geoUrl = 'https://code.highcharts.com/mapdata/countries/mx/mx-all.geo.json';
+                  else if (targetMap === 'India') geoUrl = 'https://code.highcharts.com/mapdata/countries/in/in-all.geo.json';
+                  
+                  if (geoUrl) {
+                      const response = await fetch(geoUrl);
+                      const geoJson = await response.json();
+                      echarts.registerMap(targetMap, geoJson);
+                      loadedGeoMaps[targetMap] = true;
+                  }
+              } catch (e) {
+                  console.error("Map Download Failed:", e);
+              }
+              instance.hideLoading();
+          }
+
+          let maxVal = Math.max(...data.map(i => i.metric), 1); 
+          
           option.visualMap = {
             left: 'right', min: 0, max: maxVal,
             inRange: { color: ['#ffe4e6', '#e11d48', '#4c0519'] },
             text: ['High', 'Low'], calculable: true
           };
+          
           option.series = [{
-            name: title, type: 'map', map: 'world', roam: true,
-            data: data.map(i => ({ name: i.dim, value: i.metric }))
+            name: title, 
+            type: 'map', 
+            map: targetMap, 
+            roam: true,
+            data: data.map(i => {
+              let originalName = String(i.dim).toUpperCase();
+              let mappedName = i.dim;
+
+              if (targetMap === 'USA' && usMap[originalName]) mappedName = usMap[originalName];
+              else if (targetMap === 'Canada' && caMap[originalName]) mappedName = caMap[originalName];
+              else if (targetMap === 'Mexico' && mxMap[originalName]) mappedName = mxMap[originalName];
+              else if (targetMap === 'India' && inMap[originalName]) mappedName = inMap[originalName];
+              else if (targetMap === 'world' && globalCodes[originalName]) mappedName = globalCodes[originalName];
+
+              return { name: mappedName, value: i.metric };
+            })
           }];
         }
+        
         instance.setOption(option, true);
       }
-      
+
       function appendMessage(text, sender) {
         const history = document.getElementById("chat-history");
         const bubble = document.createElement("div");
