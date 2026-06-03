@@ -33,5 +33,12 @@ def generate_semantic_artifact(enriched_metadata):
 
 
 def generate_business_insight(user_query, data_results):
-    prompt = f"""User asked: "{user_query}"\nData returned: {json.dumps(data_results)}\nWrite an explicit executive 2-sentence analytics summary."""
+    prompt = f"""
+    User asked: "{user_query}"
+    Data returned: {json.dumps(data_results)}
+    
+    Write a highly professional, comprehensive executive summary (4-6 sentences). 
+    Do not just read the numbers back. Highlight trends, identify anomalies, explain comparisons, and provide actionable business insights based on this specific data.
+    Do not use markdown formatting (no asterisks or hash symbols). Write in clear, natural paragraphs.
+    """
     return model.generate_content(prompt).text.strip()

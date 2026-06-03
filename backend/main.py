@@ -3,10 +3,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from backend.snowflake_db import get_snowflake_connection, fetch_databases, fetch_schemas, fetch_tables, extract_table_metadata
-from backend.ai_engine import  generate_business_insight, generate_semantic_artifact
+from backend.ai_engine import generate_business_insight, generate_semantic_artifact
 from backend.sql_builder import generate_snowflake_sql, execute_live_sql, fix_snowflake_sql
+
 app = FastAPI()
 
 app.add_middleware(
@@ -26,9 +27,11 @@ class BaseConnection(BaseModel):
 class ProfileRequest(BaseConnection):
     tables: List[str]
 
+# FIX: Added history array to preserve chat context
 class QueryRequest(BaseModel):
     user: str
     query: str
+    history: Optional[List[Dict[str, Any]]] = []
 
 class SessionRequest(BaseModel):
     user: str
@@ -119,9 +122,10 @@ def analyze_data(req: QueryRequest):
     schema = active_context.get("schema", "UNKNOWN")
     
     try:
-        config = generate_snowflake_sql(req.query, raw_metadata, schema_map)
+        # FIX: Pass the history into the SQL builder
+        config = generate_snowflake_sql(req.query, raw_metadata, schema_map, req.history)
         
-        if config.get("status") in ["clarify", "impossible"]:
+        if config.get("status") in ["clarify", "impossible", "chat"]:
             return {"type": "chat", "message": config.get("message", "I need more details to run this analysis.")}
             
         executed_charts = []
@@ -166,7 +170,8 @@ def analyze_data(req: QueryRequest):
             "type": "query", 
             "insight": insight,
             "charts": executed_charts, 
-            "context": context_payload
+            "context": context_payload,
+            "message": config.get("message", "") 
         }
         
     except Exception as e:
@@ -174,6 +179,7 @@ def analyze_data(req: QueryRequest):
             "type": "chat",
             "message": f"Analytical calculation failed.\n\nDetails: {str(e)}"
         }
+
 @app.get("/", response_class=HTMLResponse)
 def get_workspace_ui():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
