@@ -2,6 +2,7 @@ import google.generativeai as genai
 import os
 import json
 from dotenv import load_dotenv
+import math
 import re
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -37,10 +38,8 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=No
     5. UNSUPPORTED CHARTS: We ONLY support the 7 charts listed below. If a user asks for a Radar, Pie, or other chart, map it to the closest supported chart (like 'bar' or 'stacked_bar_100'), set "status" to "success", and you MUST clearly explain in the "message" field: "I have adapted your request for a [requested chart] into a [supported chart] as radar/pie visuals are currently optimized as multi-series bar trends."
     
     6. RELATIVE DATES (FUTURE DATA TRAP - CRITICAL): Your tables contain future calendar rows padded with 0 or NULL sales. If a user asks for "this year", "last 30 days", "recent", or "last year", NEVER use CURRENT_DATE(). You MUST dynamically anchor to the maximum date in the table WHERE THE METRIC IS GREATER THAN ZERO OR NOT NULL.
-       - Example for last 30 days: `WHERE date_column >= (SELECT DATEADD(day, -30, MAX(date_column)) FROM table_name WHERE metric_column > 0)`
-       - Example for this year: `WHERE EXTRACT(YEAR FROM date_column) = (SELECT EXTRACT(YEAR FROM MAX(date_column)) FROM table_name WHERE metric_column > 0)`
 
-    7. FLEXIBLE PRODUCT/BRAND TEXT MATCHING: Dev tables often have mismatched or nested string names (e.g., 'Colgate Total' might be Brand='COLGATE' and Item Desc='TOTAL'). If the user provides a multi-word or specific brand/product name, do NOT use strict equality `=` strings. Instead, utilize case-insensitive `ILIKE` operators or split the text across both brand and product description matching parameters to ensure clean records are swept.
+    7. FLEXIBLE PRODUCT/BRAND TEXT MATCHING: Dev tables often have mismatched or nested string names (e.g., 'Colgate Total' might be Brand='COLGATE' and Item Desc='TOTAL'). If the user provides a multi-word or specific brand/product name, utilize case-insensitive `ILIKE` operators or split the text across both brand and product description matching parameters.
 
     THE 7 SUPPORTED CHARTS & EXACT SQL STRUCTURE RULES:
     You MUST alias your SQL columns EXACTLY as requested below so our frontend parser can read them.
@@ -51,8 +50,12 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=No
     4. "histogram": (For distributions). Columns: `dim` (Calculated Bucket), `metric` (Count).
     5. "boxplot": (For statistical ranges). Columns: `dim` (Category), `min_val`, `q1_val`, `median_val`, `q3_val`, `max_val`.
     6. "stacked_bar_100": (For part-to-whole compositions). Columns: `dim` (Category/Date), `metric` (Raw Value), `series` (Segment).
-    7. "choropleth": (For geographic mapping). Columns: `dim` (Country/State Name), `metric` (Value).
-
+    7. "choropleth": (For geographic mapping). 
+       - Columns: `dim` (Country/State Name), `metric` (Value).
+       - EXPLICIT TARGET: You MUST include a new key "target_map" in your JSON specifying the country.
+       - ALLOWED MAPS: "USA", "Brazil", "India", "Canada", "Mexico", "UK", "Germany", "France", "Italy", "Spain", "Australia", "China", "Japan", "SouthAfrica", "Argentina", or "World".
+       - STANDARD NAMES ONLY: The `dim` column MUST contain standard state/country names. If the database uses aggregated custom regions (e.g., 'RJ State+MG+ES', 'NORTE', 'NE'), standard maps cannot draw them. In this case, fallback to a "bar" chart and explain in "message" that custom regions cannot be mapped geographically.
+    
     Return your response strictly as this JSON object and nothing else:
     {{
       "thought_process": "Write step-by-step analytical rationale here...",
@@ -61,7 +64,8 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=No
       "charts": [
         {{
           "chart_title": "Descriptive Title",
-          "chart_type": "bar",
+          "chart_type": "choropleth",
+          "target_map": "Brazil",
           "sql": "SELECT category AS dim, SUM(sales) AS metric FROM table_name GROUP BY dim"
         }}
       ]
@@ -102,12 +106,20 @@ def execute_live_sql(conn, sql_query, database, schema):
             row_dict = dict(zip(col_names, row))
             for k, v in row_dict.items():
                 if isinstance(v, (int, float)):
-                    clean_dict[k] = v
+                    if isinstance(v, float) and (math.isinf(v) or math.isnan(v)):
+                        clean_dict[k] = 0
+                    else:
+                        clean_dict[k] = v
                 elif v is not None:
                     try:
-                        clean_dict[k] = float(v)
-                    except ValueError:
-                        clean_dict[k] = str(v)
+                        parsed_float = float(v)
+                        if math.isinf(parsed_float) or math.isnan(parsed_float):
+                            clean_dict[k] = 0
+                        else:
+                            clean_dict[k] = parsed_float
+                    except Exception:  # FIX: Bulletproof catch-all for Dates, Decimals, Binary, or Overflow anomalies
+                        # If we can't do math on it, it safely becomes a label
+                        clean_dict[k] = str(v) 
                 else:
                     clean_dict[k] = 0
             

@@ -145,8 +145,13 @@ def analyze_data(req: QueryRequest):
                     sql = fixed_config.get("sql", sql) 
                     chart_data = execute_live_sql(conn, sql, database, schema)
                 except Exception as inner_e:
+                    executed_charts.append({
+                        "chart_title": chart.get("chart_title", "Analysis") + " ⚠️ (Failed)",
+                        "chart_type": "error",
+                        "data": [{"dim": "Error", "metric": 0}],
+                        "sql": f"-- SQL EXECUTION FAILED EVEN AFTER SELF-HEALING\n-- ERROR: {str(inner_e)}\n\n{sql}"
+                    })
                     continue
-            
             if chart_data:
                 executed_charts.append({
                     "chart_title": chart.get("chart_title", "Analysis"),

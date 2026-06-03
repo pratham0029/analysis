@@ -378,8 +378,10 @@
           result.charts.forEach((chartData, idx) => {
             const chartId = `chart-instance-${Date.now()}-${idx}`;
             const chartDiv = document.createElement("div");
-            chartDiv.className = "premium-panel p-6 rounded-2xl h-[450px] bg-white";
-            chartDiv.innerHTML = `<div id="${chartId}" class="w-full h-full"></div>`;
+            
+            chartDiv.className = "premium-panel p-6 rounded-2xl h-[450px] bg-white relative overflow-hidden";
+            chartDiv.innerHTML = `<div id="${chartId}" class="w-full h-full relative"></div>`;
+            
             chartWrapper.appendChild(chartDiv);
 
             const sqlDiv = document.createElement("div");
@@ -396,7 +398,8 @@
               if (domElement) {
                 const chartInstance = echarts.init(domElement);
                 const typeToRender = (chartData.chart_type || "bar").toLowerCase();
-                renderGraph(chartInstance, chartData.data, chartData.chart_title, typeToRender);
+                const mapHint = chartData.target_map; 
+                renderGraph(chartInstance, chartData.data, chartData.chart_title, typeToRender, mapHint);
               }
             }, 50);
           });
@@ -407,13 +410,24 @@
         }
       }
 
-      async function renderGraph(instance, data, title, type) {
+      async function renderGraph(instance, data, title, type, mapHint) {
         instance.resize();
         const xAxisInterval = type === "histogram" ? 'auto' : 0;
-        
+        if (type === "error") {
+             instance.setOption({
+                title: { text: title, left: 'center', textStyle: { color: '#e11d48', fontFamily: 'Inter', fontSize: 14 } },
+                graphic: { elements: [{ type: 'text', left: 'center', top: 'middle', style: { text: 'SQL Execution Failed.\nCheck the "Query Details" box below for logs.', fill: '#64748b', font: '14px Inter', textAlign: 'center' } }] }
+             }, true);
+             return;
+        }
+
         let option = {
           backgroundColor: "transparent",
-          title: { text: title, left: "center", textStyle: { color: "#0f172a", fontFamily: "Inter", fontSize: 14, fontWeight: "700" } },
+          // FIX: Added width and truncation to the title to prevent toolbox overlapping
+          title: { 
+              text: title, left: "center", top: "1%", 
+              textStyle: { color: "#0f172a", fontFamily: "Inter", fontSize: 14, fontWeight: "700", width: 280, overflow: 'truncate' } 
+          },
           tooltip: {
             trigger: type === "scatter" || type === "boxplot" ? "item" : "axis",
             appendToBody: true,
@@ -421,15 +435,29 @@
             textStyle: { color: "#0f172a", fontFamily: "Inter", fontWeight: "500" },
             padding: [10, 14], extraCssText: "box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border-radius: 8px; z-index: 9999;"
           },
-          grid: { top: "15%", right: "5%", bottom: "25%", left: "5%", containLabel: true }
+          toolbox: {
+            show: true, right: "4%", top: "1%",
+            feature: {
+              dataZoom: { yAxisIndex: 'none', title: { zoom: 'Zoom', back: 'Reset' } },
+              dataView: { readOnly: true, title: 'Data', lang: ['Data View', 'Close', 'Refresh'] },
+              magicType: (type === 'line' || type === 'bar') ? { type: ['line', 'bar'], title: { line: 'Line', bar: 'Bar' } } : undefined,
+              saveAsImage: { title: 'Save', name: title.replace(/[^a-z0-9]/gi, '_').toLowerCase() }
+            },
+            iconStyle: { borderColor: '#64748b' }, emphasis: { iconStyle: { borderColor: '#e11d48' } }
+          },
+          grid: { top: "18%", right: "5%", bottom: "25%", left: "5%", containLabel: true }
         };
+
+        if (type === 'line' || type === 'bar' || type === 'scatter') {
+           option.dataZoom = [ { type: 'inside', start: 0, end: 100 }, { type: 'slider', show: false } ];
+        }
 
         if (type === "line" || type === "bar") {
           const hasSeries = data.length > 0 && data[0].series !== undefined;
           if (hasSeries) {
             const dims = [...new Set(data.map(i => i.dim))];
             const seriesNames = [...new Set(data.map(i => i.series))];
-            option.legend = { data: seriesNames, top: "7%", textStyle: { fontFamily: "Inter", fontSize: 11 } };
+            option.legend = { data: seriesNames, top: "8%", textStyle: { fontFamily: "Inter", fontSize: 11 }, type: 'scroll', width: '70%' };
             option.xAxis = { type: "category", data: dims, axisLabel: { rotate: 45, interval: xAxisInterval, width: 110, overflow: "truncate", hideOverlap: true } };
             option.yAxis = { type: "value", splitLine: { lineStyle: { type: "dashed" } } };
             option.series = seriesNames.map((sName, idx) => ({
@@ -457,7 +485,7 @@
           dims.forEach(d => totalsByDim[d] = 0);
           data.forEach(item => totalsByDim[item.dim] += (item.metric || 0));
 
-          option.legend = { data: seriesNames, top: "7%", textStyle: { fontFamily: "Inter", fontSize: 11 } };
+          option.legend = { data: seriesNames, top: "8%", textStyle: { fontFamily: "Inter", fontSize: 11 }, type: 'scroll', width: '70%' };
           option.xAxis = { type: "category", data: dims, axisLabel: { rotate: 45, interval: xAxisInterval, width: 110, overflow: "truncate", hideOverlap: true } };
           option.yAxis = { type: "value", max: 100, axisLabel: { formatter: '{value}%' }, splitLine: { lineStyle: { type: "dashed" } } };
           option.series = seriesNames.map((sName, idx) => ({
@@ -501,30 +529,65 @@
         else if (type === "choropleth") {
           delete option.grid; delete option.xAxis; delete option.yAxis;
           
+          // Core 5 Maps
           const usMap = { "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming", "PR": "Puerto Rico" };
           const caMap = { "AB": "Alberta", "BC": "British Columbia", "MB": "Manitoba", "NB": "New Brunswick", "NL": "Newfoundland and Labrador", "NS": "Nova Scotia", "ON": "Ontario", "PE": "Prince Edward Island", "QC": "Quebec", "SK": "Saskatchewan", "NT": "Northwest Territories", "NU": "Nunavut", "YT": "Yukon" };
           const mxMap = { "AGS": "Aguascalientes", "BCN": "Baja California", "BCS": "Baja California Sur", "CAMP": "Campeche", "CHIS": "Chiapas", "CHIH": "Chihuahua", "COAH": "Coahuila", "COL": "Colima", "CDMX": "Ciudad de México", "DGO": "Durango", "GTO": "Guanajuato", "GRO": "Guerrero", "HGO": "Hidalgo", "JAL": "Jalisco", "MEX": "México", "MICH": "Michoacán", "MOR": "Morelos", "NAY": "Nayarit", "NL": "Nuevo León", "OAX": "Oaxaca", "PUE": "Puebla", "QRO": "Querétaro", "QROO": "Quintana Roo", "SLP": "San Luis Potosí", "SIN": "Sinaloa", "SON": "Sonora", "TAB": "Tabasco", "TAM": "Tamaulipas", "TLAX": "Tlaxcala", "VER": "Veracruz", "YUC": "Yucatán", "ZAC": "Zacatecas" };
           const inMap = { "AP": "Andhra Pradesh", "AR": "Arunachal Pradesh", "AS": "Assam", "BR": "Bihar", "CT": "Chhattisgarh", "CG": "Chhattisgarh", "GA": "Goa", "GJ": "Gujarat", "HR": "Haryana", "HP": "Himachal Pradesh", "JH": "Jharkhand", "KA": "Karnataka", "KL": "Kerala", "MP": "Madhya Pradesh", "MH": "Maharashtra", "MN": "Manipur", "ML": "Meghalaya", "MZ": "Mizoram", "NL": "Nagaland", "OR": "Odisha", "OD": "Odisha", "PB": "Punjab", "RJ": "Rajasthan", "SK": "Sikkim", "TN": "Tamil Nadu", "TG": "Telangana", "TS": "Telangana", "TR": "Tripura", "UP": "Uttar Pradesh", "UT": "Uttarakhand", "UK": "Uttarakhand", "WB": "West Bengal", "AN": "Andaman and Nicobar Islands", "CH": "Chandigarh", "DN": "Dadra and Nagar Haveli", "DD": "Daman and Diu", "DL": "Delhi", "JK": "Jammu and Kashmir", "LA": "Ladakh", "LD": "Lakshadweep", "PY": "Puducherry" };
-          const globalCodes = { "US": "United States", "USA": "United States", "GB": "United Kingdom", "UK": "United Kingdom", "CA": "Canada", "CAN": "Canada", "MX": "Mexico", "MEX": "Mexico", "IN": "India", "IND": "India", "CN": "China", "CHN": "China", "JP": "Japan", "JPN": "Japan", "DE": "Germany", "FR": "France", "BR": "Brazil", "AU": "Australia" };
+          const brMap = { "AC": "Acre", "AL": "Alagoas", "AP": "Amapá", "AM": "Amazonas", "BA": "Bahia", "CE": "Ceará", "DF": "Distrito Federal", "ES": "Espírito Santo", "GO": "Goiás", "MA": "Maranhão", "MT": "Mato Grosso", "MS": "Mato Grosso do Sul", "MG": "Minas Gerais", "PA": "Pará", "PB": "Paraíba", "PR": "Paraná", "PE": "Pernambuco", "PI": "Piauí", "RJ": "Rio de Janeiro", "RN": "Rio Grande do Norte", "RS": "Rio Grande do Sul", "RO": "Rondônia", "RR": "Roraima", "SC": "Santa Catarina", "SP": "São Paulo", "SE": "Sergipe", "TO": "Tocantins" };
+          
+          // 10 New Global Maps (Abbreviations to full names)
+          const auMap = { "NSW": "New South Wales", "VIC": "Victoria", "QLD": "Queensland", "WA": "Western Australia", "SA": "South Australia", "TAS": "Tasmania", "ACT": "Australian Capital Territory", "NT": "Northern Territory" };
+          const ukMap = { "ENG": "England", "SCT": "Scotland", "WLS": "Wales", "NIR": "Northern Ireland" };
+          const deMap = { "BW": "Baden-Württemberg", "BY": "Bavaria", "BE": "Berlin", "BB": "Brandenburg", "HB": "Bremen", "HH": "Hamburg", "HE": "Hesse", "MV": "Mecklenburg-Vorpommern", "NI": "Lower Saxony", "NW": "North Rhine-Westphalia", "RP": "Rhineland-Palatinate", "SL": "Saarland", "SN": "Saxony", "ST": "Saxony-Anhalt", "SH": "Schleswig-Holstein", "TH": "Thuringia" };
+          const arMap = { "BUE": "Buenos Aires", "CABA": "Ciudad Autónoma de Buenos Aires", "CAT": "Catamarca", "CHA": "Chaco", "CHU": "Chubut", "CBA": "Córdoba", "COR": "Corrientes", "ENT": "Entre Ríos", "FOR": "Formosa", "JUJ": "Jujuy", "LAP": "La Pampa", "LAR": "La Rioja", "MEN": "Mendoza", "MNS": "Misiones", "NEU": "Neuquén", "RIO": "Río Negro", "SAL": "Salta", "SJU": "San Juan", "SLU": "San Luis", "SCA": "Santa Cruz", "SFE": "Santa Fe", "SDE": "Santiago del Estero", "TDF": "Tierra del Fuego", "TUC": "Tucumán" };
+          const zaMap = { "EC": "Eastern Cape", "FS": "Free State", "GP": "Gauteng", "KZN": "KwaZulu-Natal", "LP": "Limpopo", "MP": "Mpumalanga", "NW": "North West", "NC": "Northern Cape", "WC": "Western Cape" };
+          
+          // Generic fallback for world codes
+          const globalCodes = { "US": "United States", "GB": "United Kingdom", "CA": "Canada", "MX": "Mexico", "IN": "India", "CN": "China", "JP": "Japan", "DE": "Germany", "FR": "France", "BR": "Brazil", "AU": "Australia" };
 
           let targetMap = 'world';
           
-          if (data.some(i => usMap[String(i.dim).toUpperCase()] || Object.values(usMap).includes(i.dim))) { targetMap = 'USA'; }
-          else if (data.some(i => caMap[String(i.dim).toUpperCase()] || Object.values(caMap).includes(i.dim))) { targetMap = 'Canada'; }
-          else if (data.some(i => mxMap[String(i.dim).toUpperCase()] || Object.values(mxMap).includes(i.dim))) { targetMap = 'Mexico'; }
-          else if (data.some(i => inMap[String(i.dim).toUpperCase()] || Object.values(inMap).includes(i.dim))) { targetMap = 'India'; }
+          const allowedMaps = ['USA', 'Brazil', 'Canada', 'Mexico', 'India', 'UK', 'Germany', 'France', 'Italy', 'Spain', 'Australia', 'China', 'Japan', 'SouthAfrica', 'Argentina', 'world'];
+          if (mapHint && allowedMaps.includes(mapHint)) {
+              targetMap = mapHint;
+          } else {
+              const mapScores = {
+                  'USA': data.filter(i => usMap[String(i.dim).toUpperCase()] || Object.values(usMap).includes(i.dim)).length,
+                  'Canada': data.filter(i => caMap[String(i.dim).toUpperCase()] || Object.values(caMap).includes(i.dim)).length,
+                  'Mexico': data.filter(i => mxMap[String(i.dim).toUpperCase()] || Object.values(mxMap).includes(i.dim)).length,
+                  'India': data.filter(i => inMap[String(i.dim).toUpperCase()] || Object.values(inMap).includes(i.dim)).length,
+                  'Brazil': data.filter(i => brMap[String(i.dim).toUpperCase()] || Object.values(brMap).includes(i.dim)).length,
+                  'Australia': data.filter(i => auMap[String(i.dim).toUpperCase()] || Object.values(auMap).includes(i.dim)).length,
+                  'UK': data.filter(i => ukMap[String(i.dim).toUpperCase()] || Object.values(ukMap).includes(i.dim)).length,
+                  'Germany': data.filter(i => deMap[String(i.dim).toUpperCase()] || Object.values(deMap).includes(i.dim)).length,
+                  'Argentina': data.filter(i => arMap[String(i.dim).toUpperCase()] || Object.values(arMap).includes(i.dim)).length,
+                  'SouthAfrica': data.filter(i => zaMap[String(i.dim).toUpperCase()] || Object.values(zaMap).includes(i.dim)).length
+              };
 
-          // --- THE FIX: DYNAMIC GEOJSON DOWNLOADING ---
+              let highestScore = 0;
+              for (const [mapName, score] of Object.entries(mapScores)) {
+                  if (score > highestScore && score > 0) {
+                      highestScore = score;
+                      targetMap = mapName;
+                  }
+              }
+          }
+
           if (!loadedGeoMaps[targetMap] && targetMap !== 'world') {
               instance.showLoading({ text: 'Downloading Map Data...', color: '#e11d48', textColor: '#0f172a', maskColor: 'rgba(255, 255, 255, 0.8)' });
               try {
                   let geoUrl = '';
-                  if (targetMap === 'USA') geoUrl = 'https://code.highcharts.com/mapdata/countries/us/us-all.geo.json';
-                  else if (targetMap === 'Canada') geoUrl = 'https://code.highcharts.com/mapdata/countries/ca/ca-all.geo.json';
-                  else if (targetMap === 'Mexico') geoUrl = 'https://code.highcharts.com/mapdata/countries/mx/mx-all.geo.json';
-                  else if (targetMap === 'India') geoUrl = 'https://code.highcharts.com/mapdata/countries/in/in-all.geo.json';
+                  const geoLinks = {
+                      'USA': 'us/us-all', 'Canada': 'ca/ca-all', 'Mexico': 'mx/mx-all', 
+                      'India': 'in/in-all', 'Brazil': 'br/br-all', 'Australia': 'au/au-all',
+                      'UK': 'gb/gb-all', 'Germany': 'de/de-all', 'France': 'fr/fr-all',
+                      'Italy': 'it/it-all', 'Spain': 'es/es-all', 'China': 'cn/cn-all',
+                      'Japan': 'jp/jp-all', 'SouthAfrica': 'za/za-all', 'Argentina': 'ar/ar-all'
+                  };
                   
-                  if (geoUrl) {
+                  if (geoLinks[targetMap]) {
+                      geoUrl = `https://code.highcharts.com/mapdata/countries/${geoLinks[targetMap]}.geo.json`;
                       const response = await fetch(geoUrl);
                       const geoJson = await response.json();
                       echarts.registerMap(targetMap, geoJson);
@@ -538,26 +601,19 @@
 
           let maxVal = Math.max(...data.map(i => i.metric), 1); 
           
-          option.visualMap = {
-            left: 'right', min: 0, max: maxVal,
-            inRange: { color: ['#ffe4e6', '#e11d48', '#4c0519'] },
-            text: ['High', 'Low'], calculable: true
-          };
-          
+          option.visualMap = { left: 'right', min: 0, max: maxVal, inRange: { color: ['#ffe4e6', '#e11d48', '#4c0519'] }, text: ['High', 'Low'], calculable: true };
           option.series = [{
-            name: title, 
-            type: 'map', 
-            map: targetMap, 
-            roam: true,
+            name: title, type: 'map', map: targetMap, roam: true,
             data: data.map(i => {
               let originalName = String(i.dim).toUpperCase();
               let mappedName = i.dim;
 
-              if (targetMap === 'USA' && usMap[originalName]) mappedName = usMap[originalName];
-              else if (targetMap === 'Canada' && caMap[originalName]) mappedName = caMap[originalName];
-              else if (targetMap === 'Mexico' && mxMap[originalName]) mappedName = mxMap[originalName];
-              else if (targetMap === 'India' && inMap[originalName]) mappedName = inMap[originalName];
-              else if (targetMap === 'world' && globalCodes[originalName]) mappedName = globalCodes[originalName];
+              // Fallback translations
+              const allDictionaries = [usMap, caMap, mxMap, inMap, brMap, auMap, ukMap, deMap, arMap, zaMap];
+              for (const dict of allDictionaries) {
+                  if (dict[originalName]) { mappedName = dict[originalName]; break; }
+              }
+              if (targetMap === 'world' && globalCodes[originalName]) mappedName = globalCodes[originalName];
 
               return { name: mappedName, value: i.metric };
             })
