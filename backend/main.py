@@ -17,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SNOWFLAKE_ACCOUNT = "COLPAL-COLGATEPALMOLIVEDEV"
+SNOWFLAKE_ACCOUNT = "COLPAL-COLGATEPALMOLIVEPROD"
 
 class BaseConnection(BaseModel):
     user: str
@@ -27,7 +27,6 @@ class BaseConnection(BaseModel):
 class ProfileRequest(BaseConnection):
     tables: List[str]
 
-# FIX: Added history array to preserve chat context
 class QueryRequest(BaseModel):
     user: str
     query: str

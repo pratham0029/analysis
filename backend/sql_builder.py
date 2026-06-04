@@ -29,17 +29,24 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=No
     SEMANTIC BLUEPRINT: {blueprint_str}
 
     CRITICAL JSON FORMATTING RULES:
-    1. ZERO OUTSIDE TEXT: You MUST output ONLY a valid JSON object. Do not output conversational pre-text.
-    2. BRAIN TRACE: Put absolutely all of your reasoning and "thinking out loud" inside the "thought_process" key.
+    1. ZERO OUTSIDE TEXT: You MUST output ONLY a valid JSON object. Do not output conversational pre-text. 
+    2. EXACTLY ONE OBJECT: You must return exactly ONE JSON object. Never return multiple JSON blocks.
+    3. BRAIN TRACE: Put absolutely all of your reasoning and "thinking out loud" inside the "thought_process" key.
 
     AGENTIC BEHAVIOR & FALLBACKS:
-    3. GREETINGS & CHAT: If the user just says "hello", or asks a general data question that does NOT require a SQL query, set "status" to "chat" and write your response in the "message" field. Leave "charts" empty.
-    4. AMBIGUITY: If the request is confusing or vague, set "status" to "clarify" and ask a clarifying question in "message".
-    5. UNSUPPORTED CHARTS: We ONLY support the 7 charts listed below. If a user asks for a Radar, Pie, or other chart, map it to the closest supported chart (like 'bar' or 'stacked_bar_100'), set "status" to "success", and you MUST clearly explain in the "message" field: "I have adapted your request for a [requested chart] into a [supported chart] as radar/pie visuals are currently optimized as multi-series bar trends."
+    4. GREETINGS & CHAT: If the user just says "hello", or asks a general data question that does NOT require a SQL query, set "status" to "chat" and write your response in the "message" field. Leave "charts" empty.
+    5. AMBIGUITY: If the request is confusing or vague, set "status" to "clarify" and ask a clarifying question in "message".
+    6. UNSUPPORTED CHARTS: We ONLY support the 7 charts listed below. If a user asks for a Radar, Pie, or other chart, map it to the closest supported chart (like 'bar' or 'stacked_bar_100'), set "status" to "success", and clearly explain the adaptation in the "message" field.
     
-    6. RELATIVE DATES (FUTURE DATA TRAP - CRITICAL): Your tables contain future calendar rows padded with 0 or NULL sales. If a user asks for "this year", "last 30 days", "recent", or "last year", NEVER use CURRENT_DATE(). You MUST dynamically anchor to the maximum date in the table WHERE THE METRIC IS GREATER THAN ZERO OR NOT NULL.
+    7. RELATIVE DATES (FUTURE DATA TRAP): Your tables contain future calendar rows padded with 0 or NULL sales. If you MUST use date math for "last 30 days" or "this year", anchor to the maximum date WHERE THE METRIC IS GREATER THAN ZERO OR NOT NULL. 
 
-    7. FLEXIBLE PRODUCT/BRAND TEXT MATCHING: Dev tables often have mismatched or nested string names (e.g., 'Colgate Total' might be Brand='COLGATE' and Item Desc='TOTAL'). If the user provides a multi-word or specific brand/product name, utilize case-insensitive `ILIKE` operators or split the text across both brand and product description matching parameters.
+    8. PRE-CALCULATED TY vs LY COLUMNS (CRITICAL): Retail schemas (especially Walmart) often have columns explicitly named for This Year (TY) and Last Year (LY) (e.g., `TY_SALES_AMT`, `LY_SALES_AMT`). If the user asks to compare This Year vs Last Year, ALWAYS check if these columns exist first. If they do, use them directly instead of attempting complex date filtering.
+    
+    9. NEVER OUTPUT A 1-BAR CHART: If the user asks for the "top", "best", "most", or "least" item, NEVER use `LIMIT 1`. A chart with one bar is useless. Always use at least `LIMIT 5` or `LIMIT 10` so the chart provides comparative context.
+
+    10. PRE-AGGREGATED RATIOS & SHARES (CRITICAL): Never use `SUM()` on columns representing percentages, shares (e.g., SOM_VALUE, SHARE_OF_MARKET), rates, or margins. Summing percentages creates mathematically impossible results (like 400% market share). To aggregate these metrics across a dimension, you MUST either:
+        A) Calculate it from the raw base numbers if available (e.g., `SUM(manufacturer_sales) / SUM(total_sales) * 100`).
+        B) If raw bases aren't available, use `AVG()` to find the average share across the grouped segments.
 
     THE 7 SUPPORTED CHARTS & EXACT SQL STRUCTURE RULES:
     You MUST alias your SQL columns EXACTLY as requested below so our frontend parser can read them.
@@ -54,7 +61,7 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=No
        - Columns: `dim` (Country/State Name), `metric` (Value).
        - EXPLICIT TARGET: You MUST include a new key "target_map" in your JSON specifying the country.
        - ALLOWED MAPS: "USA", "Brazil", "India", "Canada", "Mexico", "UK", "Germany", "France", "Italy", "Spain", "Australia", "China", "Japan", "SouthAfrica", "Argentina", or "World".
-       - STANDARD NAMES ONLY: The `dim` column MUST contain standard state/country names. If the database uses aggregated custom regions (e.g., 'RJ State+MG+ES', 'NORTE', 'NE'), standard maps cannot draw them. In this case, fallback to a "bar" chart and explain in "message" that custom regions cannot be mapped geographically.
+       - STANDARD NAMES ONLY: The `dim` column MUST contain standard state/country names. If the database uses aggregated custom regions, fallback to a "bar" chart.
     
     Return your response strictly as this JSON object and nothing else:
     {{
@@ -64,23 +71,37 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=No
       "charts": [
         {{
           "chart_title": "Descriptive Title",
-          "chart_type": "choropleth",
-          "target_map": "Brazil",
-          "sql": "SELECT category AS dim, SUM(sales) AS metric FROM table_name GROUP BY dim"
+          "chart_type": "bar",
+          "target_map": "USA",
+          "sql": "SELECT category AS dim, SUM(sales) AS metric FROM table_name GROUP BY dim LIMIT 5"
         }}
       ]
     }}
     """
     try:
         response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-        return json.loads(response.text)
-    except json.JSONDecodeError as e:
         raw_text = response.text.strip()
-        start_idx = raw_text.find('{')
-        end_idx = raw_text.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            return json.loads(raw_text[start_idx:end_idx+1])
-        raise Exception(f"AI returned malformed JSON. Details: {str(e)}")
+        
+        try:
+            return json.loads(raw_text)
+        except json.JSONDecodeError:
+            start = raw_text.find('{')
+            if start != -1:
+                count = 0
+                for i in range(start, len(raw_text)):
+                    if raw_text[i] == '{': 
+                        count += 1
+                    elif raw_text[i] == '}': 
+                        count -= 1
+                    
+                    if count == 0:
+                        clean_json = raw_text[start:i+1]
+                        return json.loads(clean_json)
+                        
+            raise Exception("AI returned unparseable JSON or multiple concatenated blocks.")
+            
+    except Exception as e:
+        raise Exception(f"AI generation failed. Details: {str(e)}")
 
 def execute_live_sql(conn, sql_query, database, schema):
     if not is_safe_sql(sql_query):
@@ -117,8 +138,7 @@ def execute_live_sql(conn, sql_query, database, schema):
                             clean_dict[k] = 0
                         else:
                             clean_dict[k] = parsed_float
-                    except Exception:  # FIX: Bulletproof catch-all for Dates, Decimals, Binary, or Overflow anomalies
-                        # If we can't do math on it, it safely becomes a label
+                    except Exception:  
                         clean_dict[k] = str(v) 
                 else:
                     clean_dict[k] = 0

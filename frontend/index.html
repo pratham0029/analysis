@@ -1641,13 +1641,13 @@
         instance.setOption(option, true);
       }
 
-      function appendMessage(text, sender) {
+function appendMessage(text, sender) {
         const history = document.getElementById("chat-history");
         const bubble = document.createElement("div");
         if (sender === "user") {
-          bubble.className = `p-3.5 px-4 rounded-2xl rounded-tr-sm w-fit max-w-[85%] bg-brand-600 text-white shadow-sm ml-auto font-medium text-[13px] leading-relaxed animate-fade-in-up`;
+          bubble.className = `p-3.5 px-4 rounded-2xl rounded-tr-sm w-fit max-w-[85%] bg-brand-600 text-white shadow-sm ml-auto font-medium text-[13px] leading-relaxed animate-fade-in-up break-words`;
         } else {
-          bubble.className = `p-3.5 px-4 rounded-2xl rounded-tl-sm w-fit max-w-[85%] bg-white border border-slate-200 text-slate-700 shadow-sm mr-auto font-medium text-[13px] leading-relaxed animate-fade-in-up`;
+          bubble.className = `p-3.5 px-4 rounded-2xl rounded-tl-sm w-fit max-w-[85%] bg-white border border-slate-200 text-slate-700 shadow-sm mr-auto font-medium text-[13px] leading-relaxed animate-fade-in-up break-words`;
         }
         bubble.innerText = text;
         history.appendChild(bubble);
