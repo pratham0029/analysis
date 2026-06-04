@@ -44,9 +44,9 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=No
     
     9. NEVER OUTPUT A 1-BAR CHART: If the user asks for the "top", "best", "most", or "least" item, NEVER use `LIMIT 1`. A chart with one bar is useless. Always use at least `LIMIT 5` or `LIMIT 10` so the chart provides comparative context.
 
-    10. PRE-AGGREGATED RATIOS & SHARES (CRITICAL): Never use `SUM()` on columns representing percentages, shares (e.g., SOM_VALUE, SHARE_OF_MARKET), rates, or margins. Summing percentages creates mathematically impossible results (like 400% market share). To aggregate these metrics across a dimension, you MUST either:
-        A) Calculate it from the raw base numbers if available (e.g., `SUM(manufacturer_sales) / SUM(total_sales) * 100`).
-        B) If raw bases aren't available, use `AVG()` to find the average share across the grouped segments.
+    10. DYNAMIC MARKET SHARE (CRITICAL): Never use `SUM()` or `AVG()` on pre-calculated share columns like `SOM_VALUE` or `SOM_VOLUME`. Averaging market share is mathematically invalid. You MUST calculate market share dynamically from the raw base metrics (like `VALUE`, `VOLUME`, or `UNITS`) using window functions so it accurately sums to 100%. 
+        - Formula: `(SUM(base_metric) / SUM(SUM(base_metric)) OVER()) * 100`
+        - Example: `SELECT manufacturer AS dim, (SUM(VALUE) / SUM(SUM(VALUE)) OVER()) * 100 AS metric FROM table_name GROUP BY dim`
 
     THE 7 SUPPORTED CHARTS & EXACT SQL STRUCTURE RULES:
     You MUST alias your SQL columns EXACTLY as requested below so our frontend parser can read them.
