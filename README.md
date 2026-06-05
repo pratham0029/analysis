@@ -5,9 +5,9 @@ An intelligent data analysis workspace that connects to Snowflake databases and 
 ## Features
 
 - **Snowflake Integration**: Secure SSO authentication with Snowflake data warehouses
-- **Natural Language to SQL**: Uses Google Gemini AI to translate natural language queries into optimized SQL
+- **Natural Language to SQL**: Uses Google Gemini AI (3.1-pro-preview and 3.5-flash) to translate natural language queries into optimized SQL
 - **Dynamic Visualization**: Automatically generates interactive charts (7 types: line, bar, scatter, histogram, boxplot, stacked_bar_100, choropleth) using ECharts
-- **Semantic Understanding**: AI analyzes table schemas and sample data to understand business context
+- **Semantic Understanding**: AI analyzes table schemas and sample data to understand business context with comprehensive semantic blueprint
 - **Multi-Chart Analysis**: Can generate multiple visualizations from a single query
 - **Business Insights**: AI-generated executive summaries of analysis results
 - **SQL Safety Guardrails**: Regex-based validation to prevent destructive operations
@@ -15,13 +15,16 @@ An intelligent data analysis workspace that connects to Snowflake databases and 
 - **Chat History Context**: Maintains conversation context for follow-up questions
 - **Flexible Text Matching**: ILIKE-based fuzzy matching for product/brand names
 - **Future Data Trap Prevention**: Smart relative date handling to avoid zero-padded future rows
+- **Pre-Calculated Column Support**: Automatically detects and uses This Year (TY) / Last Year (LY) columns when available
+- **Share Calculation Logic**: Dynamically calculates shares/ratios from base metrics to avoid mathematical errors
+- **Schema Logging**: Automatic logging of raw Snowflake metadata to timestamped JSON files
 
 ## Tech Stack
 
 ### Backend
 - **FastAPI**: Modern Python web framework
 - **Snowflake Connector**: Python driver for Snowflake
-- **Google Generative AI**: Gemini 2.5 Flash for AI processing
+- **Google Generative AI**: Gemini 3.1-pro-preview (semantic analysis) and Gemini 3.5-flash (SQL generation)
 - **Pydantic**: Data validation
 
 ### Frontend
@@ -62,16 +65,16 @@ Edit `backend/main.py` to configure your Snowflake account:
 SNOWFLAKE_ACCOUNT = "YOUR_ACCOUNT_IDENTIFIER"
 ```
 
-Edit `backend/sql_builder.py` to configure warehouse and role:
-```python
-cursor.execute('USE ROLE "YOUR_ROLE"')
-cursor.execute('USE WAREHOUSE "YOUR_WAREHOUSE"')
-```
-
-Edit `backend/snowflake_db.py` to set default warehouse and role:
+Edit `backend/snowflake_db.py` to configure warehouse and role:
 ```python
 warehouse='YOUR_WAREHOUSE',
 role='YOUR_ROLE'
+```
+
+Edit `backend/sql_builder.py` to configure warehouse and role in the `execute_live_sql` function:
+```python
+cursor.execute('USE ROLE "YOUR_ROLE"')
+cursor.execute('USE WAREHOUSE "YOUR_WAREHOUSE"')
 ```
 
 ## Usage
@@ -129,6 +132,7 @@ ai-data-analyst/
 │   └── sql_builder.py       # SQL generation and execution
 ├── frontend/
 │   └── index.html           # Single-page application UI
+├── logs/                    # Auto-generated directory for Snowflake metadata logs
 ├── .env                     # Environment variables
 ├── pyproject.toml           # Python dependencies
 └── README.md                # This file
@@ -139,16 +143,27 @@ ai-data-analyst/
 1. **Connection**: User authenticates via Snowflake SSO
 2. **Schema Analysis**: Selected tables are analyzed for:
    - Column definitions and types
-   - Sample data rows
+   - Sample data rows (using TABLESAMPLE for efficiency)
    - Primary/foreign key relationships
    - Metrics vs dimensions classification
-3. **Semantic Artifact**: AI generates a "golden artifact" understanding the business context
-4. **Query Processing**:
+3. **Semantic Artifact**: AI generates a comprehensive "semantic blueprint" understanding the business context including:
+   - Executive summary of the dataset
+   - Table grain (what one row represents)
+   - Date/time context and formatting
+   - Geographic boundaries
+   - Categorical hierarchies
+   - Business methodology and metrics
+   - Data quality flags and anomalies
+   - SQL generation rules
+4. **Schema Logging**: Raw Snowflake metadata is automatically logged to timestamped JSON files in the `logs/` directory
+5. **Query Processing**:
    - User submits natural language query
    - AI parses intent and identifies required metrics/dimensions
    - AI generates optimized SQL queries with proper aggregation
    - Multiple charts can be generated for different analytical angles
-5. **Visualization**: Results are rendered as interactive charts with SQL transparency
+   - AI handles pre-calculated TY/LY columns when available
+   - AI dynamically calculates shares/ratios from base metrics
+6. **Visualization**: Results are rendered as interactive charts with SQL transparency
 
 ## Technical Architecture & User Journey
 
@@ -192,7 +207,7 @@ This system implements a **Schema-Augmented Generation (SAG)** pattern, similar 
    - Executes `SHOW VIEWS IN SCHEMA "{database}"."{schema}"`
    - Returns combined list of tables and views with types
 
-#### Phase 3: Semantic Understanding (The "Golden Artifact")
+#### Phase 3: Semantic Understanding (The "Semantic Blueprint")
 
 **User Action**: Selects tables/views and clicks "Load Selected Tables"
 
@@ -202,32 +217,47 @@ This system implements a **Schema-Augmented Generation (SAG)** pattern, similar 
    - For each selected table:
      - Executes `DESCRIBE TABLE "{database}"."{schema}"."{table}"`
      - Extracts column names and data types
-     - Executes `SELECT * FROM ... LIMIT 5` to get sample rows
+     - Executes `SELECT * FROM ... TABLESAMPLE BERNOULLI (1) LIMIT 40` to get sample rows
      - Stores column definitions + sample data in metadata dictionary
    - Returns enriched metadata with schema + sample_data for each table
 
 3. Calls `generate_semantic_artifact(raw_enriched_metadata)` in `ai_engine.py`
-   - Sends enriched metadata to Google Gemini 2.5 Flash
+   - Sends enriched metadata to Google Gemini 3.1-pro-preview
    - AI analyzes and identifies:
-     - Primary keys (columns likely to be unique identifiers)
-     - Foreign key relationships (columns that link tables together)
-     - Metrics (numeric/financial columns: revenue, cost, quantity)
-     - Dimensions (categorical/date columns: region, status, dates)
-     - Business context description (professional paragraph explaining data purpose)
-   - Returns "golden artifact" JSON with:
+     - Executive summary of the dataset
+     - Table grain (what one row represents)
+     - Date/time context and formatting
+     - Geographic boundaries
+     - Categorical hierarchies
+     - Business methodology and metrics
+     - Data quality flags and anomalies
+     - SQL generation rules
+     - Column definitions with precise meanings
+     - Primary/foreign key relationships
+     - Metrics vs dimensions classification
+   - Returns "semantic blueprint" JSON with:
      ```json
      {
-       "description": "Business context explanation...",
-       "relationships": [{"table_1": "...", "col_1": "...", "table_2": "...", "col_2": "..."}],
+       "executive_summary": "Business context explanation...",
+       "table_grain": "What one row represents...",
+       "date_time_context": "Temporal data formatting...",
+       "geographic_context": "Geo-spatial data constraints...",
+       "categorical_hierarchy": "Product/business segment hierarchies...",
+       "business_methodology": "Units of measure, currencies, calculation logic...",
+       "data_quality_flags": "Anomalies, NULL handling, placeholder values...",
+       "sql_generation_rules": ["Rule 1", "Rule 2"],
+       "column_definitions": {"TABLE_NAME.COL_1": "Precise meaning..."},
+       "relationships": [{"table_1": "...", "col_1": "...", "table_2": "...", "col_2": "...", "join_type": "INNER JOIN"}],
        "metrics": ["TOTAL_REVENUE", "QUANTITY_SOLD"],
        "dimensions": ["REGION", "ORDER_DATE"]
      }
      ```
 
-4. Stores in `USER_SCHEMAS[user]`:
+4. Logs raw metadata to `logs/snowflake_dump_{timestamp}.json` for debugging and audit purposes
+5. Stores in `USER_SCHEMAS[user]`:
    - database, schema, tables
    - raw_metadata (column definitions + sample data)
-   - metadata (golden artifact - semantic understanding)
+   - metadata (semantic blueprint - comprehensive understanding)
 
 #### Phase 4: Query Analysis & Execution (The Core AI Pipeline)
 
@@ -236,15 +266,15 @@ This system implements a **Schema-Augmented Generation (SAG)** pattern, similar 
 **Backend Flow**:
 1. `POST /api/analyze` → `analyze_data()` in `main.py`
    - Retrieves connection from `ACTIVE_CONNECTIONS`
-   - Retrieves context from `USER_SCHEMAS` (golden artifact + raw metadata)
+   - Retrieves context from `USER_SCHEMAS` (semantic blueprint + raw metadata)
 
 2. Calls `generate_snowflake_sql(user_query, raw_metadata, schema_map, history)` in `sql_builder.py`
    - Constructs prompt with:
      - Chat history (for context from previous questions)
      - Current user question
      - Raw schema (column definitions + sample data)
-     - Semantic blueprint (golden artifact with relationships, metrics, dimensions)
-   - Sends to Google Gemini 2.5 Flash with strict JSON output requirement
+     - Semantic blueprint (comprehensive understanding with relationships, metrics, dimensions, and business context)
+   - Sends to Google Gemini 3.5-flash with strict JSON output requirement
    - AI performs agentic reasoning:
      - Analyzes user intent (greeting, clarification needed, or data query)
      - Identifies required metrics and dimensions
@@ -252,6 +282,9 @@ This system implements a **Schema-Augmented Generation (SAG)** pattern, similar 
      - Generates SQL queries with proper aggregation (GROUP BY before LIMIT)
      - Handles relative dates (anchors to MAX date where metric > 0 to avoid future zero rows)
      - Uses ILIKE for flexible text matching (product/brand names)
+     - Checks for pre-calculated TY/LY columns before attempting date filtering
+     - Avoids 1-bar charts by using at least LIMIT 5 or LIMIT 10
+     - Dynamically calculates shares/ratios from base metrics using window functions
    - Returns JSON configuration:
      ```json
      {
@@ -262,7 +295,7 @@ This system implements a **Schema-Augmented Generation (SAG)** pattern, similar 
          {
            "chart_title": "Revenue Trends by Region",
            "chart_type": "line",
-           "target_map": "Brazil",  // for choropleth
+           "target_map": "Brazil",
            "sql": "SELECT region AS dim, SUM(revenue) AS metric FROM table GROUP BY region"
          }
        ]
@@ -285,7 +318,7 @@ This system implements a **Schema-Augmented Generation (SAG)** pattern, similar 
      - Returns data array: `[{"dim": "Region A", "metric": 1000}, ...]`
 
    - If SQL execution fails:
-     - Calls `fix_snowflake_sql(bad_sql, error_msg, golden_artifact)` in `sql_builder.py`
+     - Calls `fix_snowflake_sql(bad_sql, error_msg, semantic_blueprint)` in `sql_builder.py`
        - Sends failed SQL + error message + schema map to AI
        - AI analyzes error and generates corrected SQL
        - Returns JSON: `{"sql": "SELECT ..."}`
@@ -356,27 +389,30 @@ This system implements a **Schema-Augmented Generation (SAG)** pattern, similar 
    - **Purpose**: Extract column definitions and sample data
    - **How it works**:
      - For each table: runs `DESCRIBE TABLE` to get schema
-     - Runs `SELECT * LIMIT 5` to get sample rows
+     - Runs `SELECT * TABLESAMPLE BERNOULLI (1) LIMIT 40` to get sample rows
      - Handles secured views that restrict SELECT *
    - **Returns**: Dictionary with column definitions and sample data per table
 
 6. **`generate_semantic_artifact(enriched_metadata)`** (ai_engine.py)
    - **Purpose**: AI-powered business context analysis
    - **How it works**:
-     - Sends schema + sample data to Gemini 2.5 Flash
+     - Sends schema + sample data to Gemini 3.1-pro-preview
      - AI identifies relationships, metrics, dimensions
-     - AI writes business context description
-   - **Returns**: Golden artifact JSON with semantic understanding
+     - AI writes comprehensive semantic blueprint including executive summary, table grain, date/time context, geographic context, categorical hierarchy, business methodology, data quality flags, and SQL generation rules
+   - **Returns**: Semantic blueprint JSON with comprehensive understanding
 
 #### Query Analysis Functions
 
-7. **`generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history)`** (sql_builder.py)
+7. **`generate_snowflake_sql(user_query, raw_metadata, semantic_blueprint, history)`** (sql_builder.py)
    - **Purpose**: Translate natural language to SQL with multi-chart planning
    - **How it works**:
      - Constructs comprehensive prompt with schema, semantic blueprint, chat history
      - AI performs chain-of-thought reasoning
      - AI determines optimal chart types and SQL structure
      - AI handles edge cases (relative dates, text matching, aggregation)
+     - AI checks for pre-calculated TY/LY columns before date filtering
+     - AI avoids 1-bar charts by using at least LIMIT 5 or LIMIT 10
+     - AI dynamically calculates shares/ratios from base metrics using window functions
    - **Returns**: JSON with chart configurations and SQL queries
 
 8. **`is_safe_sql(sql_query)`** (sql_builder.py)
@@ -393,7 +429,7 @@ This system implements a **Schema-Augmented Generation (SAG)** pattern, similar 
      - Formats data for frontend consumption
    - **Returns**: Array of dimension/metric objects
 
-10. **`fix_snowflake_sql(bad_sql, error_msg, golden_artifact)`** (sql_builder.py)
+10. **`fix_snowflake_sql(bad_sql, error_msg, semantic_blueprint)`** (sql_builder.py)
     - **Purpose**: AI-powered SQL error correction
     - **How it works**:
       - Sends failed SQL + error + schema to AI

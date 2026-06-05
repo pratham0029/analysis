@@ -71,7 +71,7 @@ def extract_table_metadata(conn, database, schema, tables):
             ]
             
             try:
-                cursor.execute(f'SELECT * FROM "{database}"."{schema}"."{table}" TABLESAMPLE BERNOULLI (1) LIMIT 20')
+                cursor.execute(f'SELECT * FROM "{database}"."{schema}"."{table}" TABLESAMPLE BERNOULLI (1) LIMIT 40')
                 sample_rows = cursor.fetchall()
                 table_data["sample_data"] = [dict(zip(col_names, row)) for row in sample_rows]
             except Exception as e:
