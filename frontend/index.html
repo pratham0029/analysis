@@ -514,10 +514,76 @@
         document
           .getElementById("semantic-context-panel")
           .classList.remove("hidden");
+
         document.getElementById("semantic-description").innerText =
-          artifact.description || "No description generated.";
+          artifact.executive_summary ||
+          artifact.description ||
+          "No summary generated.";
+
+        let badgesHTML = '<div class="grid grid-cols-2 gap-4 mb-6">';
+
+        const categories = [
+          {
+            key: "table_grain",
+            title: "Table Grain & Row Level",
+            icon: "M4 6h16M4 10h16M4 14h16M4 18h16",
+          },
+          {
+            key: "business_methodology",
+            title: "Methodology & Units",
+            icon: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
+          },
+          {
+            key: "date_time_context",
+            title: "Date & Time Logic",
+            icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+          },
+          {
+            key: "geographic_context",
+            title: "Geographic Scope",
+            icon: "M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+          },
+          {
+            key: "categorical_hierarchy",
+            title: "Categorical Hierarchy",
+            icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
+          },
+          {
+            key: "data_quality_flags",
+            title: "Data Quality & Anomalies",
+            icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
+          },
+        ];
+
+        categories.forEach((cat) => {
+          if (artifact[cat.key]) {
+            badgesHTML += `
+              <div class="p-4 bg-slate-50 border border-slate-100 rounded-xl shadow-sm">
+                <div class="flex items-center gap-2 mb-2">
+                  <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${cat.icon}"></path></svg>
+                  <h5 class="text-[11px] font-bold text-slate-700 uppercase tracking-wider">${cat.title}</h5>
+                </div>
+                <p class="text-[13px] text-slate-600 leading-relaxed font-medium">${artifact[cat.key]}</p>
+              </div>
+            `;
+          }
+        });
+        badgesHTML += "</div>";
+
+        let existingGrid = document.getElementById("dynamic-badges-grid");
+        if (existingGrid) existingGrid.remove();
+
+        const descriptionEl = document.getElementById("semantic-description");
+        descriptionEl.insertAdjacentHTML(
+          "afterend",
+          `<div id="dynamic-badges-grid">${badgesHTML}</div>`,
+        );
+
         const artifactClone = { ...artifact };
+        categories.forEach((c) => delete artifactClone[c.key]);
+        delete artifactClone.executive_summary;
         delete artifactClone.description;
+
         document.getElementById("semantic-json").innerText = JSON.stringify(
           artifactClone,
           null,
@@ -1641,7 +1707,7 @@
         instance.setOption(option, true);
       }
 
-function appendMessage(text, sender) {
+      function appendMessage(text, sender) {
         const history = document.getElementById("chat-history");
         const bubble = document.createElement("div");
         if (sender === "user") {

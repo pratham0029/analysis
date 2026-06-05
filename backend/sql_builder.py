@@ -6,7 +6,7 @@ import math
 import re
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel('gemini-3.5-flash')
 
 def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=None):
     raw_schema_str = json.dumps(raw_metadata, default=str)
@@ -44,7 +44,7 @@ def generate_snowflake_sql(user_query, raw_metadata, golden_artifact, history=No
     
     9. NEVER OUTPUT A 1-BAR CHART: If the user asks for the "top", "best", "most", or "least" item, NEVER use `LIMIT 1`. A chart with one bar is useless. Always use at least `LIMIT 5` or `LIMIT 10` so the chart provides comparative context.
 
-    10. DYNAMIC MARKET SHARE (CRITICAL): Never use `SUM()` or `AVG()` on pre-calculated share columns like `SOM_VALUE` or `SOM_VOLUME`. Averaging market share is mathematically invalid. You MUST calculate market share dynamically from the raw base metrics (like `VALUE`, `VOLUME`, or `UNITS`) using window functions so it accurately sums to 100%. 
+    10. PRE-CALCULATED SHARES & RATIOS (CRITICAL): Never use `SUM()` or `AVG()` on pre-calculated percentage or share columns (e.g., ANY column containing 'SOM', 'SHARE', 'PERCENT', 'RATIO', or 'MARGIN'). Averaging ratios is mathematically invalid. To find the share across a dimension, you MUST calculate it dynamically from the raw base metrics (like `VALUE`, `VOLUME`, `SALES`, or `UNITS`) using window functions so it accurately sums to 100%. 
         - Formula: `(SUM(base_metric) / SUM(SUM(base_metric)) OVER()) * 100`
         - Example: `SELECT manufacturer AS dim, (SUM(VALUE) / SUM(SUM(VALUE)) OVER()) * 100 AS metric FROM table_name GROUP BY dim`
 
