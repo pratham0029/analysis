@@ -558,7 +558,7 @@
         categories.forEach((cat) => {
           if (artifact[cat.key]) {
             badgesHTML += `
-              <div class="p-4 bg-slate-50 border border-slate-100 rounded-xl shadow-sm">
+              <div class="p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:-translate-y-1 hover:shadow-md hover:border-brand-300 transition-all duration-300 ease-in-out">
                 <div class="flex items-center gap-2 mb-2">
                   <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${cat.icon}"></path></svg>
                   <h5 class="text-[11px] font-bold text-slate-700 uppercase tracking-wider">${cat.title}</h5>
@@ -830,8 +830,7 @@
         appendMessage(query, "user");
 
         chatContext.push({ role: "user", content: query });
-        if (chatContext.length > 6) chatContext = chatContext.slice(-6);
-
+        if (chatContext.length > 10) chatContext = chatContext.slice(-10);
         const historyLog = document.getElementById("chat-history");
         const loadingId = "loading-" + Date.now();
         const loadingBubble = document.createElement("div");

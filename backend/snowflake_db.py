@@ -8,7 +8,9 @@ def get_snowflake_connection(account, user):
             user=user,
             authenticator='externalbrowser',
             warehouse='VIZ_UTIL_SMALL_WH',
-            role='PUBLIC'
+            role='PUBLIC',
+            client_store_temporary_credential=True, 
+            client_session_keep_alive=True
         )
         return conn
     except Exception as e:
@@ -58,10 +60,18 @@ def extract_table_metadata(conn, database, schema, tables):
             cursor.execute(f'DESCRIBE TABLE "{database}"."{schema}"."{table}"')
             columns = cursor.fetchall()
             col_names = [col[0] for col in columns]
-            table_data["schema"] = [{"column": col[0], "type": col[1]} for col in columns]
+            
+            table_data["schema"] = [
+                {
+                    "column": col[0], 
+                    "type": col[1], 
+                    "comment": col[8] if len(col) > 8 and col[8] else "No comment provided."
+                } 
+                for col in columns
+            ]
             
             try:
-                cursor.execute(f'SELECT * FROM "{database}"."{schema}"."{table}" TABLESAMPLE (100) LIMIT 20')
+                cursor.execute(f'SELECT * FROM "{database}"."{schema}"."{table}" TABLESAMPLE BERNOULLI (1) LIMIT 20')
                 sample_rows = cursor.fetchall()
                 table_data["sample_data"] = [dict(zip(col_names, row)) for row in sample_rows]
             except Exception as e:

@@ -1,4 +1,6 @@
 import os
+import json
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -81,6 +83,19 @@ def profile_selection(req: ProfileRequest):
     
     try:
         raw_enriched_metadata = extract_table_metadata(conn, req.database, req.schema_name, req.tables)
+        
+
+        try:
+            os.makedirs("logs", exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_filename = f"logs/snowflake_dump_{timestamp}.json"
+            
+            with open(log_filename, "w", encoding="utf-8") as log_file:
+                json.dump(raw_enriched_metadata, log_file, indent=4, default=str)
+            print(f"✅ Raw Snowflake Data successfully logged to: {log_filename}")
+        except Exception as log_error:
+            print(f"⚠️ Could not write log file: {log_error}")
+
         golden_artifact = generate_semantic_artifact(raw_enriched_metadata)
         
         USER_SCHEMAS[req.user] = {
@@ -92,6 +107,7 @@ def profile_selection(req: ProfileRequest):
         }
         return {"status": "success", "artifact": golden_artifact}
     except Exception as e:
+        print(f"FATAL ERROR in profile_selection: {str(e)}") 
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/restore-session")
